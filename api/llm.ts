@@ -4,7 +4,7 @@
 // send its own `x-api-key` header (set via the in-app Settings dialog), which
 // takes precedence over the server key.
 
-export const config = { runtime: "edge" }
+export const runtime = "edge"
 
 const UPSTREAM = "https://open.bigmodel.cn/api/coding/paas/v4"
 
