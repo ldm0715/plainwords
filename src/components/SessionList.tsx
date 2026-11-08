@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Plus, X } from "lucide-react"
+import { Loader2, Plus, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,6 +14,8 @@ import type { Session } from "@/lib/sessions"
 interface Props {
   sessions: Session[]
   activeId: string
+  /** session with an LLM round-trip in flight — shows a spinner on its row */
+  busyId?: string | null
   onSelect: (id: string) => void
   onNew: () => void
   onDelete: (id: string) => void
@@ -25,6 +27,7 @@ interface Props {
 export function SessionList({
   sessions,
   activeId,
+  busyId = null,
   onSelect,
   onNew,
   onDelete,
@@ -66,6 +69,12 @@ export function SessionList({
             onKeyDown={(e) => e.key === "Enter" && onSelect(s.id)}
             className="group hover:bg-muted data-[active=true]:bg-muted flex cursor-pointer items-center justify-between gap-2 rounded-lg bg-card px-3 py-2 text-sm"
           >
+            {s.id === busyId && (
+              <Loader2
+                className="text-muted-foreground size-3.5 shrink-0 animate-spin"
+                aria-label={ui("working…", "处理中…")}
+              />
+            )}
             <span className="truncate">{s.title}</span>
             <button
               type="button"

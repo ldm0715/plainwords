@@ -11,6 +11,8 @@ import type { Balances } from "@/lib/types"
 interface Props {
   sessions: Session[]
   activeId: string
+  /** session with an LLM round-trip in flight — spinner on its row */
+  busySessionId: string | null
   onSelectSession: (id: string) => void
   onNewSession: () => void
   onDeleteSession: (id: string) => void
@@ -22,6 +24,7 @@ interface Props {
 export function Sidebar({
   sessions,
   activeId,
+  busySessionId,
   onSelectSession,
   onNewSession,
   onDeleteSession,
@@ -54,6 +57,7 @@ export function Sidebar({
         className="min-h-0 flex-1"
         sessions={sessions}
         activeId={activeId}
+        busyId={busySessionId}
         onSelect={onSelectSession}
         onNew={onNewSession}
         onDelete={onDeleteSession}

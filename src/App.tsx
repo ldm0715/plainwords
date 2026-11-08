@@ -78,6 +78,8 @@ function AppInner() {
   const { publicKey, signTransaction, connected } = useWallet()
   const [tab, setTab] = useState<Tab>("chat")
   const [busy, setBusy] = useState(false)
+  // which session has an LLM round-trip in flight (session-list spinner)
+  const [busySid, setBusySid] = useState<string | null>(null)
   // UI language (Settings dialog) — state exists purely to re-render on change
   const [, setUiLangTick] = useState(0)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -126,11 +128,14 @@ function AppInner() {
     if (activeId) saveActiveId(ownerKey, activeId)
   }, [activeId, ownerKey])
 
-  const mutateActive = useCallback(
-    (fn: (msgs: ChatMessage[]) => ChatMessage[], titleFromUser?: string) => {
+  // All session writes go through here with an EXPLICIT session id — async
+  // flows capture it at entry so a reply always lands in the session it
+  // belongs to, even if the user switches away mid-request.
+  const mutateSession = useCallback(
+    (sid: string, fn: (msgs: ChatMessage[]) => ChatMessage[], titleFromUser?: string) => {
       setSessions((prev) =>
         prev.map((s) =>
-          s.id === activeId
+          s.id === sid
             ? {
                 ...s,
                 messages: fn(s.messages),
@@ -144,7 +149,7 @@ function AppInner() {
         ),
       )
     },
-    [activeId],
+    [],
   )
 
   const selectSession = useCallback((id: string) => {
@@ -297,11 +302,11 @@ function AppInner() {
   }, [publicKey, refreshHistory])
 
   // --- chat flow ---
-  const pushAssistant = useCallback(
-    (text: string) => {
-      mutateActive((m) => [...m, { id: uid(), role: "assistant", text }])
+  const pushTo = useCallback(
+    (sid: string, text: string) => {
+      mutateSession(sid, (m) => [...m, { id: uid(), role: "assistant", text }])
     },
-    [mutateActive],
+    [mutateSession],
   )
 
   // Shared execution tail for transfer/swap intents: deterministic resolve →
@@ -309,11 +314,12 @@ function AppInner() {
   // send dialog (direct intents, no LLM round-trip).
   const runTransferIntent = useCallback(
     async (
+      sid: string,
       intent: SendIntent | SwapIntent,
       batch?: { id: string; index: number; total: number },
     ) => {
       if (!publicKey || !connected) {
-        pushAssistant(t("connectFirst"))
+        pushTo(sid, t("connectFirst"))
         return
       }
       const pending =
@@ -327,7 +333,7 @@ function AppInner() {
           : await resolveSwap(publicKey, intent, sessionTotalUsdRef.current)
 
       if ("error" in pending) {
-        pushAssistant(pending.error)
+        pushTo(sid, pending.error)
         return
       }
       // Tag the confirm card with the contact name when we know it.
@@ -335,19 +341,24 @@ function AppInner() {
         pending.destLabel = contacts.find((c) => c.address === pending.destAddress)?.name
         if (batch) pending.batch = batch
       }
-      mutateActive((m) => [
+      mutateSession(sid, (m) => [
         ...m,
         { id: uid(), role: "confirm", action: pending, status: "pending" },
       ])
     },
-    [publicKey, connected, pushAssistant, contacts, mutateActive],
+    [publicKey, connected, pushTo, contacts, mutateSession],
   )
 
   const handleSend = useCallback(
     async (text: string) => {
+      // Bind every write in this flow to the session it was sent from — the
+      // user may switch sessions while the LLM round-trip is in flight.
+      const sid = activeId
+      const pushAssistant = (t: string) => pushTo(sid, t)
       lastUserTextRef.current = text
       setLangFromText(text) // deterministic replies mirror the user's language
-      mutateActive((m) => [...m, { id: uid(), role: "user", text }], text)
+      setBusySid(sid)
+      mutateSession(sid, (m) => [...m, { id: uid(), role: "user", text }], text)
 
       if (!publicKey || !connected) {
         pushAssistant(t("connectFirst"))
@@ -539,7 +550,7 @@ function AppInner() {
               pushAssistant(t("contactNotFound", { name: intent.name }))
               continue
             }
-            mutateActive((m) => [
+            mutateSession(sid, (m) => [
               ...m,
               {
                 id: uid(),
@@ -563,7 +574,7 @@ function AppInner() {
               pushAssistant(t("contactNotFound", { name: intent.name }))
               continue
             }
-            mutateActive((m) => [
+            mutateSession(sid, (m) => [
               ...m,
               {
                 id: uid(),
@@ -579,7 +590,7 @@ function AppInner() {
             continue
           }
 
-          await runTransferIntent(intent, batch)
+          await runTransferIntent(sid, intent, batch)
         }
       } catch (e) {
         pushAssistant(
@@ -587,24 +598,31 @@ function AppInner() {
         )
       } finally {
         setBusy(false)
+        setBusySid(null)
       }
     },
-    [messages, publicKey, connected, pushAssistant, solPriceUsd, contacts, mutateActive, history],
+    [messages, publicKey, connected, activeId, pushTo, solPriceUsd, contacts, mutateSession, history],
   )
 
-  const updateConfirm = useCallback(
-    (id: string, patch: Partial<ConfirmMessage>) => {
-      mutateActive((m) =>
+  const updateConfirmIn = useCallback(
+    (sid: string, id: string, patch: Partial<ConfirmMessage>) => {
+      mutateSession(sid, (m) =>
         m.map((msg) =>
           msg.id === id && msg.role === "confirm" ? { ...msg, ...patch } : msg,
         ),
       )
     },
-    [mutateActive],
+    [mutateSession],
   )
 
   const handleConfirm = useCallback(
     async (id: string) => {
+      // this card's session — execution keeps writing here even if the user
+      // navigates to another session while the tx is signing/confirming
+      const sid = activeId
+      const pushAssistant = (t: string) => pushTo(sid, t)
+      const updateConfirm = (mid: string, patch: Partial<ConfirmMessage>) =>
+        updateConfirmIn(sid, mid, patch)
       const msg = messages.find((m): m is ConfirmMessage => m.id === id && m.role === "confirm")
       if (!msg || msg.status !== "pending") return
 
@@ -723,11 +741,12 @@ function AppInner() {
         )
       }
     },
-    [messages, publicKey, signTransaction, solPriceUsd, updateConfirm, refreshBalances, refreshHistory, pushAssistant],
+    [messages, publicKey, signTransaction, solPriceUsd, activeId, updateConfirmIn, refreshBalances, refreshHistory, pushTo],
   )
 
   const handleCancel = useCallback(
     (id: string) => {
+      const sid = activeId
       const msg = messages.find((m): m is ConfirmMessage => m.id === id && m.role === "confirm")
       // a cancelled leg still counts against its batch's remaining total
       const prog =
@@ -735,28 +754,34 @@ function AppInner() {
           ? batchProgress.current.get(msg.action.batch.id)
           : undefined
       if (prog) prog.skipped++
-      updateConfirm(id, { status: "cancelled" })
+      updateConfirmIn(sid, id, { status: "cancelled" })
       // The card is invisible to the LLM — without a chat message it would see
       // an unanswered transfer request and may claim it succeeded.
-      pushAssistant(t("transferCancelled"))
+      pushTo(sid, t("transferCancelled"))
     },
-    [messages, updateConfirm, pushAssistant],
+    [messages, activeId, updateConfirmIn, pushTo],
   )
 
   // --- in-chat contact confirmation cards (LLM requests) ---
-  const updateContactConfirm = useCallback(
-    (id: string, patch: Partial<Extract<ChatMessage, { role: "contact-confirm" }>>) => {
-      mutateActive((m) =>
+  const updateContactConfirmIn = useCallback(
+    (sid: string, id: string, patch: Partial<Extract<ChatMessage, { role: "contact-confirm" }>>) => {
+      mutateSession(sid, (m) =>
         m.map((msg) =>
           msg.id === id && msg.role === "contact-confirm" ? { ...msg, ...patch } : msg,
         ),
       )
     },
-    [mutateActive],
+    [mutateSession],
   )
 
   const handleContactConfirm = useCallback(
     (id: string) => {
+      const sid = activeId
+      const pushAssistant = (t: string) => pushTo(sid, t)
+      const updateContactConfirm = (
+        mid: string,
+        patch: Partial<Extract<ChatMessage, { role: "contact-confirm" }>>,
+      ) => updateContactConfirmIn(sid, mid, patch)
       const msg = messages.find(
         (m): m is Extract<ChatMessage, { role: "contact-confirm" }> =>
           m.id === id && m.role === "contact-confirm",
@@ -787,14 +812,14 @@ function AppInner() {
       updateContactConfirm(id, { status: "applied" })
       pushAssistant(t("contactRemoved", { name: a.originalName }))
     },
-    [messages, updateContactConfirm, pushAssistant],
+    [messages, activeId, updateContactConfirmIn, pushTo, ownerKey],
   )
 
   const handleContactCancel = useCallback(
     (id: string) => {
-      updateContactConfirm(id, { status: "cancelled" })
+      updateContactConfirmIn(activeId, id, { status: "cancelled" })
     },
-    [updateContactConfirm],
+    [activeId, updateContactConfirmIn],
   )
 
   // --- Contacts-panel edit/remove confirmation dialog ---
@@ -825,6 +850,7 @@ function AppInner() {
       <Sidebar
         sessions={sessions}
         activeId={activeSession?.id ?? ""}
+        busySessionId={busySid}
         onSelectSession={selectSession}
         onNewSession={startNewSession}
         onDeleteSession={deleteSession}
@@ -845,7 +871,9 @@ function AppInner() {
           <>
             <ChatWindow
               messages={messages}
-              busy={busy}
+              /* session-scoped: only the session that is actually processing
+                 shows "thinking…" — never the one the user switched to */
+              busy={busySid !== null && busySid === (activeSession?.id ?? "")}
               onConfirm={handleConfirm}
               onCancel={handleCancel}
               onContactConfirm={handleContactConfirm}
@@ -860,6 +888,7 @@ function AppInner() {
               newButtonStyle="fab"
               sessions={sessions}
               activeId={activeSession?.id ?? ""}
+              busyId={busySid}
               onSelect={selectSession}
               onNew={startNewSession}
               onDelete={deleteSession}
@@ -916,9 +945,10 @@ function AppInner() {
         onSubmit={(intent, displayText) => {
           setSendFor(null)
           setTab("chat")
+          const sid = activeId
           // leave a user-message trace so the chat (and the LLM's context) stays coherent
-          mutateActive((m) => [...m, { id: uid(), role: "user", text: displayText }], displayText)
-          void runTransferIntent(intent)
+          mutateSession(sid, (m) => [...m, { id: uid(), role: "user", text: displayText }], displayText)
+          void runTransferIntent(sid, intent)
         }}
       />
     </div>
