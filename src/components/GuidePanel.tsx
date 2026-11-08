@@ -1,3 +1,4 @@
+import type { ReactNode } from "react"
 import {
   ArrowLeftRight,
   BookOpenText,
@@ -10,11 +11,48 @@ import {
   UsersRound,
 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ui } from "@/lib/i18n"
 
-export function GuidePanel() {
+interface Props {
+  connected: boolean
+  connecting: boolean
+  onConnect: () => void
+}
+
+function Step({
+  n,
+  title,
+  done,
+  children,
+}: {
+  n: number
+  title: string
+  done?: boolean
+  children: ReactNode
+}) {
+  return (
+    <li className="flex gap-3 rounded-lg border px-4 py-3">
+      <span
+        className={
+          done
+            ? "flex size-6 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+            : "bg-muted text-muted-foreground flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-semibold"
+        }
+      >
+        {done ? <CheckCircle2 className="size-4" /> : n}
+      </span>
+      <div className="min-w-0 space-y-1">
+        <div className="text-sm font-medium">{title}</div>
+        <div className="text-muted-foreground text-xs leading-relaxed">{children}</div>
+      </div>
+    </li>
+  )
+}
+
+export function GuidePanel({ connected, connecting, onConnect }: Props) {
   // data lives INSIDE the component so ui() re-evaluates on language switch
   const PRINCIPLES = [
     {
@@ -107,20 +145,69 @@ export function GuidePanel() {
           </p>
         </section>
 
-        {/* principles */}
-        <section className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
-          {PRINCIPLES.map((p, i) => (
-            <Card key={p.title} className="gap-3 py-0">
-              <CardContent className="space-y-2 px-4 py-4">
-                <div className="flex items-center justify-between">
-                  <p.icon className="text-primary size-5" />
-                  <span className="text-muted-foreground/50 text-xs font-semibold">0{i + 1}</span>
-                </div>
-                <div className="text-sm leading-snug font-semibold">{p.title}</div>
-                <p className="text-muted-foreground text-xs leading-relaxed">{p.body}</p>
-              </CardContent>
-            </Card>
-          ))}
+        {/* quick start */}
+        <section className="space-y-3">
+          <div className="flex items-baseline justify-between gap-2">
+            <h3 className="text-sm font-semibold tracking-wide uppercase">
+              {ui("Quick start", "快速开始")}
+            </h3>
+            <span className="text-muted-foreground text-[11px]">{ui("about 3 minutes", "约 3 分钟")}</span>
+          </div>
+          <ol className="space-y-2">
+            <Step n={1} title={ui("Install Phantom and switch to Devnet", "安装 Phantom 并切到 Devnet")}>
+              {ui(
+                "Phantom → Settings → Developer Settings → Testnet Mode, then reload this page.",
+                "Phantom → 设置 → 开发者设置 → 测试网模式，然后刷新本页。",
+              )}{" "}
+              <a href="https://phantom.app" target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                {ui("Get Phantom", "安装 Phantom")}
+              </a>
+            </Step>
+            <Step n={2} title={ui("Fund the wallet with test tokens", "给钱包领测试币")}>
+              {ui("SOL from", "SOL 来自")}{" "}
+              <a href="https://faucets.solana.com" target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                faucets.solana.com
+              </a>
+              {ui(", USDC from", "，USDC 来自")}{" "}
+              <a href="https://faucet.circle.com" target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                faucet.circle.com
+              </a>{" "}
+              {ui("(choose Solana Devnet).", "（选择 Solana Devnet）。")}
+            </Step>
+            <Step n={3} title={ui("Connect your wallet", "连接钱包")} done={connected}>
+              {connected ? (
+                <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="size-3.5" />
+                  {ui("Connected — chat and contacts are unlocked.", "已连接 —— 聊天和联系人已解锁。")}
+                </span>
+              ) : (
+                <>
+                  {ui("Chat stays locked until a wallet is connected.", "未连接钱包前，聊天和联系人处于锁定状态。")}{" "}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-6 px-2 text-[11px]"
+                    onClick={onConnect}
+                    disabled={connecting}
+                  >
+                    {connecting ? ui("Connecting…", "连接中…") : ui("Connect wallet", "连接钱包")}
+                  </Button>
+                </>
+              )}
+            </Step>
+            <Step n={4} title={ui("Ask for something in plain words", "用大白话提一个请求")}>
+              {ui(
+                'Start with a read-only question like "how much do I have?", then try a transfer or a swap from the examples below.',
+                "先问一个只读问题，比如“我现在有多少钱？”，再试下面的转账或兑换示例。",
+              )}
+            </Step>
+            <Step n={5} title={ui("Confirm on the card, sign in Phantom", "在确认卡上确认，在 Phantom 里签名")}>
+              {ui(
+                "Nothing moves until you confirm. Red-level actions ask you to type CONFIRM first.",
+                "你确认之前链上不会有任何变化。高风险操作需要先输入 CONFIRM。",
+              )}
+            </Step>
+          </ol>
         </section>
 
         {/* examples as chat bubbles */}
@@ -136,6 +223,27 @@ export function GuidePanel() {
                 </div>
                 <div className="text-muted-foreground min-w-0 flex-1 truncate text-xs">{e.note}</div>
               </div>
+            ))}
+          </div>
+        </section>
+
+        {/* principles */}
+        <section className="space-y-3">
+          <h3 className="text-sm font-semibold tracking-wide uppercase">
+            {ui("Why it is safe", "为什么安全")}
+          </h3>
+          <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-3">
+            {PRINCIPLES.map((p, i) => (
+              <Card key={p.title} className="gap-3 py-0">
+                <CardContent className="space-y-2 px-4 py-4">
+                  <div className="flex items-center justify-between">
+                    <p.icon className="text-primary size-5" />
+                    <span className="text-muted-foreground/50 text-xs font-semibold">0{i + 1}</span>
+                  </div>
+                  <div className="text-sm leading-snug font-semibold">{p.title}</div>
+                  <p className="text-muted-foreground text-xs leading-relaxed">{p.body}</p>
+                </CardContent>
+              </Card>
             ))}
           </div>
         </section>

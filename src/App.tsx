@@ -981,7 +981,11 @@ function AppInner() {
             </div>
           )
         ) : (
-          <GuidePanel />
+          <GuidePanel
+            connected={walletReady}
+            connecting={connecting}
+            onConnect={() => openWalletModal(true)}
+          />
         )}
       </main>
 
