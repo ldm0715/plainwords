@@ -74,6 +74,12 @@ export function saveLLMConfig(cfg: Partial<LLMConfig>): void {
   }
 }
 
+// In production builds the app is served by Vercel: /api/llm is an Edge
+// Function that injects the server-side key (ZHIPU_API_KEY) — or forwards a
+// user's own key from Settings (BYOK) via the x-api-key header. Local dev
+// keeps the vite /llm proxy + .env key.
+const isProd = Boolean(import.meta.env.PROD)
+
 let client = new OpenAI({
   baseURL: ENV_BASE_URL,
   apiKey: import.meta.env.VITE_LLM_KEY ?? "",
@@ -84,11 +90,22 @@ let client = new OpenAI({
 /** Current effective config: settings overrides > env fallbacks. */
 export function getLLMConfig(): LLMConfig {
   const saved = loadLLMConfig()
+  if (isProd) {
+    return {
+      baseUrl: saved.baseUrl || resolveBaseUrl("/api/llm"),
+      apiKey: saved.apiKey || "server-managed",
+      model: saved.model || ENV_MODEL,
+    }
+  }
   return {
     baseUrl: saved.baseUrl || ENV_BASE_URL,
     apiKey: saved.apiKey || import.meta.env.VITE_LLM_KEY || "",
     model: saved.model || ENV_MODEL,
   }
+}
+
+function savedApiKey(): string | undefined {
+  return loadLLMConfig().apiKey
 }
 
 /** Rebuild the client after the user changes settings. */
@@ -99,7 +116,11 @@ export function applyLLMConfig(cfg: Partial<LLMConfig>): void {
     baseURL: effective.baseUrl,
     apiKey: effective.apiKey,
     dangerouslyAllowBrowser: true,
-    defaultHeaders: parseExtraHeaders(),
+    defaultHeaders: {
+      ...parseExtraHeaders(),
+      // BYOK: forward the user's own key to the /api/llm edge function
+      ...(isProd && savedApiKey() ? { "x-api-key": savedApiKey()! } : {}),
+    },
   })
 }
 
