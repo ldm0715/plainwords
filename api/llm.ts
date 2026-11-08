@@ -4,7 +4,9 @@
 // send its own `x-api-key` header (set via the in-app Settings dialog), which
 // takes precedence over the server key.
 
-export const runtime = "edge"
+// Bare Vercel Functions (non-Next.js) opt into the edge runtime with a
+// `config` export; `export const runtime` is a Next.js-only convention.
+export const config = { runtime: "edge" }
 
 const UPSTREAM = "https://open.bigmodel.cn/api/coding/paas/v4"
 
