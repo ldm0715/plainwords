@@ -80,12 +80,22 @@ export function saveLLMConfig(cfg: Partial<LLMConfig>): void {
 // keeps the vite /llm proxy + .env key.
 const isProd = Boolean(import.meta.env.PROD)
 
-let client = new OpenAI({
-  baseURL: ENV_BASE_URL,
-  apiKey: import.meta.env.VITE_LLM_KEY ?? "",
-  dangerouslyAllowBrowser: true,
-  defaultHeaders: parseExtraHeaders(),
-})
+/** Build the client from the effective config (settings > env). */
+function buildClient(): OpenAI {
+  const effective = getLLMConfig()
+  return new OpenAI({
+    baseURL: effective.baseUrl,
+    apiKey: effective.apiKey,
+    dangerouslyAllowBrowser: true,
+    defaultHeaders: {
+      ...parseExtraHeaders(),
+      // BYOK: forward the user's own key to the /api/llm edge function
+      ...(isProd && savedApiKey() ? { "x-api-key": savedApiKey()! } : {}),
+    },
+  })
+}
+
+let client = buildClient()
 
 /** Current effective config: settings overrides > env fallbacks. */
 export function getLLMConfig(): LLMConfig {
@@ -111,17 +121,7 @@ function savedApiKey(): string | undefined {
 /** Rebuild the client after the user changes settings. */
 export function applyLLMConfig(cfg: Partial<LLMConfig>): void {
   saveLLMConfig(cfg)
-  const effective = getLLMConfig()
-  client = new OpenAI({
-    baseURL: effective.baseUrl,
-    apiKey: effective.apiKey,
-    dangerouslyAllowBrowser: true,
-    defaultHeaders: {
-      ...parseExtraHeaders(),
-      // BYOK: forward the user's own key to the /api/llm edge function
-      ...(isProd && savedApiKey() ? { "x-api-key": savedApiKey()! } : {}),
-    },
-  })
+  client = buildClient()
 }
 
 const client_ = () => client
