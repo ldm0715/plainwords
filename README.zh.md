@@ -5,6 +5,7 @@
 | | |
 |---|---|
 | **在线演示** | https://plainwords-chi.vercel.app（Phantom 切到 **Devnet**） |
+| **演示视频** | [▶ 观看 2 分钟演示](https://drive.google.com/file/d/1SNOw3q6e4dBKiPbAs4GwHQ5XXUlC0wp4/view?usp=sharing) |
 | **赛事** | [Solana Hackathon x MLH](https://events.mlh.com/events/15200-solana-hackathon) —— AI Track / DeFi Track |
 | **网络** | Solana Devnet · SOL 与 USDC |
 
