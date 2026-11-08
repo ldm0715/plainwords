@@ -317,7 +317,12 @@ function AppInner() {
     const scheduleSync = () => {
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
-        if (!closed) refreshHistory({ force: true })
+        if (!closed) {
+          // An incoming transfer changes both the history and the balance —
+          // refresh both, not just the history list.
+          void refreshBalances()
+          void refreshHistory({ force: true })
+        }
       }, 3500)
     }
 
@@ -336,7 +341,7 @@ function AppInner() {
       void connection.removeAccountChangeListener(ownerSub)
       if (ataSub !== undefined) void connection.removeAccountChangeListener(ataSub)
     }
-  }, [publicKey, refreshHistory])
+  }, [publicKey, refreshHistory, refreshBalances])
 
   // --- chat flow ---
   const pushTo = useCallback(
