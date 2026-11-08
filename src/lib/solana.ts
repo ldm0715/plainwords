@@ -126,11 +126,34 @@ export async function buildUSDCTransfer(
 /** Signature function injected from the wallet adapter. */
 export type Signer = <T extends Transaction | VersionedTransaction>(tx: T) => Promise<T>
 
+/** Marker thrown when the wallet popup was dismissed without ever resolving. */
+export const SIGN_WINDOW_CLOSED = "SIGN_WINDOW_CLOSED"
+
+const SIGN_WINDOW_MS = 60_000
+
 /** Refresh blockhash (the user may have stared at the confirm card a while), then sign+send+confirm. */
 export async function signSendConfirm(signTransaction: Signer, tx: Transaction): Promise<string> {
   const { blockhash, lastValidBlockHeight } = await connection.getLatestBlockhash()
   tx.recentBlockhash = blockhash
-  const signed = await signTransaction(tx)
+  // Dismissing the wallet popup (clicking outside it) often leaves the
+  // signature promise hanging forever — no resolve, no reject — which used to
+  // stick the confirm card on "Signing and sending". Race the signature
+  // against a window; once the window rejects, execution has bailed out, so a
+  // signature trickling in later resolves into a promise nobody reads — it is
+  // never sent.
+  const signed = await new Promise<Transaction>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(SIGN_WINDOW_CLOSED)), SIGN_WINDOW_MS)
+    signTransaction(tx).then(
+      (s) => {
+        clearTimeout(timer)
+        resolve(s)
+      },
+      (e) => {
+        clearTimeout(timer)
+        reject(e)
+      },
+    )
+  })
   const signature = await connection.sendRawTransaction(signed.serialize())
   await connection.confirmTransaction({ signature, blockhash, lastValidBlockHeight }, "confirmed")
   return signature

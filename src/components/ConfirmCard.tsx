@@ -215,7 +215,12 @@ export function ConfirmCard({ message, onConfirm, onCancel }: Props) {
             <div className="text-destructive text-sm">
               {result?.error?.includes("User rejected")
                 ? ui("You rejected the signature in your wallet — nothing was moved.", "你在钱包中拒绝了签名 — 链上无任何变动。")
-                : `${ui("Failed", "失败")}: ${result?.error ?? ui("unknown error", "未知错误")}`}
+                : result?.error?.includes("SIGN_WINDOW_CLOSED")
+                  ? ui(
+                      "No signature arrived — the wallet popup may have been closed. Nothing was signed or moved on-chain.",
+                      "没有收到钱包签名 — 签名弹窗可能被关掉了。链上无任何变动。",
+                    )
+                  : `${ui("Failed", "失败")}: ${result?.error ?? ui("unknown error", "未知错误")}`}
             </div>
           )}
         </CardFooter>
