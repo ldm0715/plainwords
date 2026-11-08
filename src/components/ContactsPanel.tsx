@@ -72,6 +72,9 @@ export function ContactsPanel({
     if (!edit) return
     const current = contacts.find((c) => c.name === edit.original)
     onRequestEdit(edit.original, edit.name, edit.address, current?.address ?? "", edit.description)
+    // the confirm dialog takes over from here — drop the inline edit form so
+    // the row reverts to display mode no matter how the dialog resolves
+    setEdit(null)
   }
 
   return (
