@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { ConnectionProvider, WalletProvider, useWallet } from "@solana/wallet-adapter-react"
-import { WalletModalProvider } from "@solana/wallet-adapter-react-ui"
+import { WalletModalProvider, useWalletModal } from "@solana/wallet-adapter-react-ui"
 import "@solana/wallet-adapter-react-ui/styles.css"
+import { Wallet } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { BalanceCards } from "@/components/BalanceBar"
 import { ChatInput } from "@/components/ChatInput"
 import { ChatWindow } from "@/components/ChatWindow"
@@ -31,7 +33,7 @@ import {
   syncTransferHistory,
   type TransferRecord,
 } from "@/lib/history"
-import { setLangFromText, t, type Lang } from "@/lib/i18n"
+import { setLangFromText, t, ui, type Lang } from "@/lib/i18n"
 import { getSOLPriceUSD } from "@/lib/price"
 import {
   loadActiveId,
@@ -75,7 +77,10 @@ function WalletProviders({ children }: { children: React.ReactNode }) {
 }
 
 function AppInner() {
-  const { publicKey, signTransaction, connected } = useWallet()
+  const { publicKey, signTransaction, connected, connecting } = useWallet()
+  const { setVisible: openWalletModal } = useWalletModal()
+  // Chat needs a wallet: balances, contacts scoping and signing all depend on it.
+  const walletReady = Boolean(publicKey && connected)
   const [tab, setTab] = useState<Tab>("chat")
   const [busy, setBusy] = useState(false)
   // which session has an LLM round-trip in flight (session-list spinner)
@@ -351,6 +356,9 @@ function AppInner() {
 
   const handleSend = useCallback(
     async (text: string) => {
+      // The composer is gated on wallet connection; this is the safety net.
+      if (!publicKey || !connected) return
+
       // Bind every write in this flow to the session it was sent from — the
       // user may switch sessions while the LLM round-trip is in flight.
       const sid = activeId
@@ -359,11 +367,6 @@ function AppInner() {
       setLangFromText(text) // deterministic replies mirror the user's language
       setBusySid(sid)
       mutateSession(sid, (m) => [...m, { id: uid(), role: "user", text }], text)
-
-      if (!publicKey || !connected) {
-        pushAssistant(t("connectFirst"))
-        return
-      }
 
       setBusy(true)
       try {
@@ -601,7 +604,7 @@ function AppInner() {
         setBusySid(null)
       }
     },
-    [messages, publicKey, connected, activeId, pushTo, solPriceUsd, contacts, mutateSession, history],
+    [messages, publicKey, connected, walletReady, activeId, pushTo, solPriceUsd, contacts, mutateSession, history],
   )
 
   const updateConfirmIn = useCallback(
@@ -879,7 +882,31 @@ function AppInner() {
               onContactConfirm={handleContactConfirm}
               onContactCancel={handleContactCancel}
             />
-            <ChatInput onSend={handleSend} disabled={busy} />
+            {walletReady ? (
+              <ChatInput onSend={handleSend} disabled={busy} />
+            ) : (
+              <div className="border-t bg-card px-4 py-5">
+                <div className="mx-auto flex max-w-md flex-col items-center gap-3 text-center">
+                  <span className="bg-muted text-muted-foreground flex size-10 items-center justify-center rounded-full">
+                    <Wallet className="size-5" />
+                  </span>
+                  <div>
+                    <p className="text-sm font-medium">
+                      {ui("Connect your wallet to start", "先连接钱包再开始")}
+                    </p>
+                    <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                      {ui(
+                        "PlainWords reads balances and prepares transactions for you. Connect Phantom on Devnet — signing happens in the wallet, keys never leave it.",
+                        "PlainWords 需要读取余额并为你准备交易。连接切到 Devnet 的 Phantom —— 签名在钱包里完成，私钥不会离开钱包。",
+                      )}
+                    </p>
+                  </div>
+                  <Button onClick={() => openWalletModal(true)} disabled={connecting}>
+                    {connecting ? ui("Connecting…", "连接中…") : ui("Connect wallet", "连接钱包")}
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         ) : tab === "chats" ? (
           <div className="min-h-0 flex-1 p-4">
