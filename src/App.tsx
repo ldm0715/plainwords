@@ -23,7 +23,7 @@ import {
   updateContact,
   type Contact,
 } from "@/lib/contacts"
-import { executeSend, resolveSend, resolveSwap, templateSummary } from "@/lib/pipeline"
+import { executeSend, fmtAmount, resolveSend, resolveSwap, templateSummary } from "@/lib/pipeline"
 import {
   filterTransfers,
   ingestSignatures,
@@ -370,6 +370,29 @@ function AppInner() {
               solUsd,
               usdc: b.usdc.toFixed(2),
               total,
+            }),
+          )
+          return
+        }
+
+        if (intent.tool === "get_price") {
+          // boot-time price if we have it, else a fresh quote; math stays
+          // deterministic here — the LLM never converts currencies itself
+          const price = solPriceUsd ?? (await getSOLPriceUSD())
+          if (price === null) {
+            pushAssistant(t("priceUnavailable"))
+            return
+          }
+          const asset = intent.asset ?? "SOL"
+          const amount = intent.amount ?? 1
+          const quote = asset === "SOL" ? "USDC" : "SOL"
+          const out = asset === "SOL" ? amount * price : amount / price
+          pushAssistant(
+            t("price", {
+              amount: fmtAmount(asset, amount),
+              asset,
+              out: fmtAmount(quote, out),
+              quote,
             }),
           )
           return

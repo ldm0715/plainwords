@@ -51,6 +51,8 @@ export function ui(en: string, zh: string): string {
 type Key =
   | "connectFirst"
   | "balance"
+  | "price"
+  | "priceUnavailable"
   | "contactSaved"
   | "notInContactsNudge"
   | "somethingWentWrong"
@@ -141,6 +143,14 @@ const MESSAGES: Record<Key, (v: Record<string, string>) => string> = {
     current === "zh"
       ? `你有 ${v.sol} SOL${v.solUsd} 和 ${v.usdc} USDC。${v.total}`
       : `You have ${v.sol} SOL${v.solUsd} and ${v.usdc} USDC.${v.total}`,
+  price: (v) =>
+    current === "zh"
+      ? `${v.amount} ${v.asset} ≈ ${v.out} ${v.quote}（Jupiter 实时报价）。`
+      : `${v.amount} ${v.asset} ≈ ${v.out} ${v.quote} (live Jupiter quote).`,
+  priceUnavailable: () =>
+    current === "zh"
+      ? "现在拿不到实时价格,稍后再试。"
+      : "I can't get a live price right now — try again in a moment.",
   contactSaved: (v) =>
     current === "zh"
       ? `已保存 — "${v.name}" 现在是 ${v.addr}。以后只要说"给 ${v.name} 转 20 USDC"就行。`

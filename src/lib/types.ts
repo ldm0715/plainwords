@@ -37,6 +37,15 @@ export interface BalanceIntent {
   risk_flags?: RiskFlag[]
 }
 
+/** Live SOL⇄USDC spot price. Read-only: no chain touch, no confirmation card. */
+export interface PriceIntent {
+  tool: "get_price"
+  /** asset being priced; the quote is the other wallet asset. Default "SOL". */
+  asset?: Asset
+  /** how much of `asset` to price. Default 1. */
+  amount?: number
+}
+
 /** Local-only actions on the address book. Never touch the chain. */
 export interface AddContactIntent {
   tool: "add_contact"
@@ -69,7 +78,13 @@ export interface QueryTransfersIntent {
   limit?: number
 }
 
-export type Intent = SwapIntent | SendIntent | BalanceIntent | ContactIntent | QueryTransfersIntent
+export type Intent =
+  | SwapIntent
+  | SendIntent
+  | BalanceIntent
+  | PriceIntent
+  | ContactIntent
+  | QueryTransfersIntent
 
 export interface Balances {
   sol: number

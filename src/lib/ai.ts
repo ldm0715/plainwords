@@ -12,6 +12,7 @@ import type {
   BalanceIntent,
   EditContactIntent,
   Intent,
+  PriceIntent,
   QueryTransfersIntent,
   RiskFlag,
   SendIntent,
@@ -136,6 +137,29 @@ const TOOLS: OpenAI.ChatCompletionTool[] = [
       description:
         "Show the user's current SOL and USDC balances. Call when they ask how much they have.",
       parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_price",
+      description:
+        "Live SOL/USDC price. Call when the user asks what SOL or USDC is worth in the other asset, e.g. \"SOL 现在多少 U?\", \"what's 0.5 SOL in USDC?\". Read-only — no confirmation needed.",
+      parameters: {
+        type: "object",
+        properties: {
+          asset: {
+            type: "string",
+            enum: ASSETS,
+            description: "Asset being priced. Default SOL (priced in USDC).",
+          },
+          amount: {
+            type: "number",
+            description: "Amount of that asset to price. Default 1.",
+          },
+        },
+        required: [],
+      },
     },
   },
   {
@@ -284,6 +308,13 @@ function coerceIntent(name: string, raw: string): Intent | null {
 
   if (name === "get_balance") {
     const intent: BalanceIntent = { tool: "get_balance" }
+    return intent
+  }
+
+  if (name === "get_price") {
+    const intent: PriceIntent = { tool: "get_price" }
+    if (ASSETS.includes(args.asset as Asset)) intent.asset = args.asset as Asset
+    if (typeof args.amount === "number" && args.amount > 0) intent.amount = args.amount
     return intent
   }
 
