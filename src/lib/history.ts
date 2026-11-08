@@ -5,6 +5,7 @@
 import { getAssociatedTokenAddress } from "@solana/spl-token"
 import { PublicKey, LAMPORTS_PER_SOL, type ConfirmedSignatureInfo } from "@solana/web3.js"
 import { connection, USDC_MINT } from "./solana"
+import { localDayCutoff } from "./time"
 import type { Asset } from "./types"
 
 export interface TransferRecord {
@@ -311,7 +312,11 @@ export interface TransferFilter {
   counterpartyAddress?: string
   /** transaction signature — full id or the 8-char prefix shown in chat results */
   signaturePrefix?: string
-  /** only include records newer than N days */
+  /** inclusive lower bound, unix seconds */
+  since?: number
+  /** exclusive upper bound, unix seconds */
+  until?: number
+  /** only include records from the last N calendar days (1 = today, local time) */
   days?: number
   limit?: number
 }
@@ -333,8 +338,13 @@ export function matchTransfers(
     // order ids are quoted verbatim from result messages and cards — exact case
     out = out.filter((r) => r.signature.startsWith(sigPrefix))
   }
-  if (filter.days && filter.days > 0) {
-    const cutoff = Date.now() / 1000 - filter.days * 86400
+  if (filter.since !== undefined) out = out.filter((r) => r.blockTime >= filter.since!)
+  if (filter.until !== undefined) out = out.filter((r) => r.blockTime < filter.until!)
+  if (filter.days && filter.days > 0 && filter.since === undefined) {
+    // Calendar days in the user's timezone: days:1 = today, days:7 = today + 6
+    // prior days. A rolling 24h window would pull in yesterday's records for
+    // "today" questions asked in the morning.
+    const cutoff = localDayCutoff(filter.days)
     out = out.filter((r) => r.blockTime >= cutoff)
   }
   return out

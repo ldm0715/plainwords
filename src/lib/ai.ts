@@ -6,11 +6,13 @@ import { PublicKey } from "@solana/web3.js"
 import OpenAI from "openai"
 import systemPrompt from "@/prompts/system.md?raw"
 import { formatContactsForPrompt, type Contact } from "./contacts"
+import { formatNowForPrompt, isLocalDate } from "./time"
 import type {
   Asset,
   AmountMode,
   BalanceIntent,
   EditContactIntent,
+  HistoryPeriod,
   Intent,
   PriceIntent,
   QueryTransfersIntent,
@@ -155,6 +157,17 @@ const FLAGS: RiskFlag[] = [
   "pressure_tactic",
 ]
 
+const HISTORY_PERIODS: HistoryPeriod[] = [
+  "today",
+  "yesterday",
+  "last_3_days",
+  "last_7_days",
+  "this_week",
+  "last_week",
+  "this_month",
+  "last_month",
+]
+
 // Prompt parity (system.md rule 5): at most 3 send_payment calls per turn.
 const MAX_TURN_INTENTS = 3
 
@@ -289,7 +302,8 @@ const TOOLS: OpenAI.ChatCompletionTool[] = [
       name: "query_transfers",
       description:
         "Look up the user's SOL/USDC transfer history (in and out). Use for questions like \"who did I send to?\", \"how much did I send to fat?\", \"这周花了多少钱\", \"最大的一笔是多少\". The result is data for you to summarize in the user's language. " +
-        "Fields: `count` = matching transfers in the loaded history; `returned` = rows in `transfers` (a display list only, may be smaller than `count`); `summary` = totals over ALL matches — `matched`, `sent`/`received` sums and fees, USD estimates, and `ranked` (every match sorted by USD value, largest first); `coverage` = `loaded`, `oldestLoaded`, and `partial` (true means older transfers inside the requested window may not be scanned yet). " +
+        "Fields: `count` = matching transfers in the loaded history; `returned` = rows in `transfers` (a display list only, may be smaller than `count`); `window` = the resolved local date range actually used; `summary` = totals over ALL matches — `matched`, `sent`/`received` sums and fees, USD estimates, and `ranked` (every match sorted by USD value, largest first); `coverage` = `loaded`, `oldestLoaded`, and `partial` (true means older transfers inside the requested window may not be scanned yet). " +
+        "Time filters are natural local calendar days, not rolling hours: prefer `period` for named windows ('today', 'this_week' starts Monday), `since`/`until` for explicit dates or ranges from the Current time block, and `days` only for 'past N days' including today. " +
         "History is synced from the chain on wallet connect: roughly the latest 50 signatures per address, cache up to 100 transfers, SOL/USDC only. " +
         "Never count, sum, convert or sort yourself — read `summary` and `ranked`. If `coverage.partial` is true, say the totals are based on the latest available transfers; never present them as a complete week/all-time total.",
       parameters: {
@@ -310,10 +324,26 @@ const TOOLS: OpenAI.ChatCompletionTool[] = [
             description:
               "Order id (transaction signature), full or the 8-char prefix shown in result messages. Use it to look up ONE specific transfer.",
           },
+          period: {
+            type: "string",
+            enum: HISTORY_PERIODS,
+            description:
+              "Named natural-day window in the user's local timezone. this_week starts Monday. Prefer this when the user names a period (optional)",
+          },
+          since: {
+            type: "string",
+            description:
+              "Inclusive local start date, YYYY-MM-DD — take it from the Current time block, e.g. for '前三天' use the date 3 days ago (optional)",
+          },
+          until: {
+            type: "string",
+            description:
+              "Inclusive local end date, YYYY-MM-DD (optional; omit for 'up to now')",
+          },
           days: {
             type: "number",
             description:
-              "Only the last N days (1–365). Use 1 for 'today', 7 for 'this week' (optional)",
+              "Last N calendar days including today (1–365), local timezone. Use only for 'past N days'; for named periods prefer `period` (optional)",
           },
           limit: {
             type: "number",
@@ -444,6 +474,20 @@ function coerceIntent(name: string, raw: string): Intent | null {
     if (typeof args.signature === "string" && args.signature.trim()) {
       intent.signature = args.signature.trim()
     }
+    if (typeof args.period === "string" && args.period.trim()) {
+      if (!HISTORY_PERIODS.includes(args.period as HistoryPeriod)) return null
+      intent.period = args.period as HistoryPeriod
+    }
+    // A malformed date would silently query the wrong window — reject the call
+    // and let the guided retry produce a valid one.
+    if (typeof args.since === "string" && args.since.trim()) {
+      if (!isLocalDate(args.since)) return null
+      intent.since = args.since.trim()
+    }
+    if (typeof args.until === "string" && args.until.trim()) {
+      if (!isLocalDate(args.until)) return null
+      intent.until = args.until.trim()
+    }
     if (typeof args.limit === "number" && args.limit > 0) {
       intent.limit = Math.min(Math.floor(args.limit), 50)
     }
@@ -472,7 +516,7 @@ export async function parseIntent(
     )
   }
 
-  const system = systemPrompt + formatContactsForPrompt(contacts)
+  const system = systemPrompt + formatNowForPrompt() + formatContactsForPrompt(contacts)
 
   const ask = async () =>
     client_().chat.completions.create({
@@ -544,7 +588,7 @@ export async function answerWithToolResult(args: {
     temperature: 0.3,
     tools: TOOLS,
     messages: [
-      { role: "system", content: systemPrompt },
+      { role: "system", content: systemPrompt + formatNowForPrompt() },
       ...args.history,
       {
         role: "assistant",

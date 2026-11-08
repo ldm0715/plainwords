@@ -36,6 +36,7 @@ import {
 } from "@/lib/history"
 import { setLangFromText, t, ui, type Lang } from "@/lib/i18n"
 import { getSOLPriceUSD } from "@/lib/price"
+import { formatLocalDateTime, resolveHistoryWindow } from "@/lib/time"
 import {
   loadActiveId,
   loadSessions,
@@ -497,6 +498,9 @@ function AppInner() {
               ? (contacts.find((c) => c.name === intent.counterparty!.toLowerCase())?.address ??
                 intent.counterparty)
               : undefined
+            // Resolve the requested window to local natural-day bounds: explicit
+            // dates > named period > last N days. All filtering is deterministic.
+            const window = resolveHistoryWindow(intent)
             // Filter first, slice only for display: totals, counts and rankings
             // must cover every match, otherwise "this week's total" silently
             // shrinks to the display limit.
@@ -505,6 +509,8 @@ function AppInner() {
               direction: intent.direction,
               counterpartyAddress: cpAddress,
               signaturePrefix: intent.signature,
+              since: window.since,
+              until: window.until,
               days: intent.days,
             })
             const limit = Math.min(Math.max(intent.limit ?? 10, 1), 50)
@@ -514,19 +520,17 @@ function AppInner() {
             // missing instead of assuming the totals are complete.
             const oldestLoaded =
               all.length > 0 ? Math.min(...all.map((r) => r.blockTime)) : null
-            const windowStart =
-              intent.days && intent.days > 0
-                ? Date.now() / 1000 - intent.days * 86400
-                : null
+            const windowStart = window.since ?? null
+            // Resolved range shown to the model so it quotes the right dates
+            // instead of re-deriving "today" / "this week" on its own.
+            const windowLabel = {
+              since: windowStart === null ? null : formatLocalDateTime(windowStart),
+              until: window.until === undefined ? "now" : formatLocalDateTime(window.until - 1),
+            }
             const coverage = {
               loaded: all.length,
               oldestLoaded:
-                oldestLoaded === null
-                  ? null
-                  : new Date(oldestLoaded * 1000)
-                      .toISOString()
-                      .slice(0, 16)
-                      .replace("T", " "),
+                oldestLoaded === null ? null : formatLocalDateTime(oldestLoaded),
               partial:
                 historyCapped &&
                 oldestLoaded !== null &&
@@ -542,7 +546,7 @@ function AppInner() {
               // full on-chain order id — the LLM correlates result messages
               // (8-char prefix) against this; timestamps alone are ambiguous
               signature: r.signature,
-              time: new Date(r.blockTime * 1000).toISOString().slice(0, 16).replace("T", " "),
+              time: formatLocalDateTime(r.blockTime),
             }))
             // deterministic totals — the LLM quotes these, it never adds numbers itself
             const total = (asset: "SOL" | "USDC", out: boolean) =>
@@ -571,10 +575,7 @@ function AppInner() {
                       asset: r.asset,
                       amount: Number(r.uiAmount.toFixed(6)),
                       counterparty: nameByAddr.get(r.counterparty) ?? r.counterparty,
-                      time: new Date(r.blockTime * 1000)
-                        .toISOString()
-                        .slice(0, 16)
-                        .replace("T", " "),
+                      time: formatLocalDateTime(r.blockTime),
                       signature: r.signature,
                       ...(solP !== null ? { usdEstimate: +usdOf(r).toFixed(2) } : {}),
                     }))
@@ -601,7 +602,7 @@ function AppInner() {
                 toolCallId: item.toolCallId ?? "",
                 toolName: "query_transfers",
                 toolArgs: intent,
-                result: { count: matched.length, returned: rows.length, coverage, summary, transfers: data },
+                result: { count: matched.length, returned: rows.length, window: windowLabel, coverage, summary, transfers: data },
               })
               pushAssistant(answer || `Found ${matched.length} transfer(s).`)
             } catch {
@@ -615,7 +616,7 @@ function AppInner() {
                     (r) =>
                       `${r.outgoing ? "→" : "←"} ${r.uiAmount} ${r.asset} · ${
                         nameByAddr.get(r.counterparty) ?? r.counterparty.slice(0, 8)
-                      } · ${new Date(r.blockTime * 1000).toLocaleDateString()}`,
+                      } · ${formatLocalDateTime(r.blockTime)}`,
                   )
                 pushAssistant(lines.join("\n"))
               }

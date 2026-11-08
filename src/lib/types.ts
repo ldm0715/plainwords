@@ -69,6 +69,17 @@ export interface RemoveContactIntent {
 export type ContactIntent = AddContactIntent | EditContactIntent | RemoveContactIntent
 
 /** Ask about the saved transfer history (answered from the local cache). */
+/** Named natural-day history windows, anchored to the user's local timezone. */
+export type HistoryPeriod =
+  | "today"
+  | "yesterday"
+  | "last_3_days"
+  | "last_7_days"
+  | "this_week"
+  | "last_week"
+  | "this_month"
+  | "last_month"
+
 export interface QueryTransfersIntent {
   tool: "query_transfers"
   asset?: Asset
@@ -76,6 +87,13 @@ export interface QueryTransfersIntent {
   counterparty?: string
   /** order id — transaction signature, full or the 8-char prefix shown in chat */
   signature?: string
+  /** named natural-day window (preferred when the user names a period) */
+  period?: HistoryPeriod
+  /** inclusive local start date, YYYY-MM-DD */
+  since?: string
+  /** inclusive local end date, YYYY-MM-DD */
+  until?: string
+  /** last N calendar days including today */
   days?: number
   limit?: number
 }
