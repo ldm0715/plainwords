@@ -57,6 +57,10 @@ type Key =
   | "batchPartial"
   | "batchDone"
   | "batchMixed"
+  | "transferCancelled"
+  | "signRejected"
+  | "signTimeout"
+  | "walletSessionExpired"
   | "contactSaved"
   | "notInContactsNudge"
   | "somethingWentWrong"
@@ -171,6 +175,22 @@ const MESSAGES: Record<Key, (v: Record<string, string>) => string> = {
     current === "zh"
       ? `本批 ${v.total} 笔已处理完毕 — ${v.done} 笔成功,${v.skipped} 笔未执行。`
       : `Batch finished: ${v.done} succeeded, ${v.skipped} not executed.`,
+  transferCancelled: () =>
+    current === "zh"
+      ? "已取消 — 没有任何转账发生。"
+      : "Cancelled — no transfer was made.",
+  signRejected: () =>
+    current === "zh"
+      ? "你在钱包里拒绝了签名 — 链上没有任何变动。"
+      : "You rejected the signature in your wallet — nothing was moved on-chain.",
+  signTimeout: () =>
+    current === "zh"
+      ? "没有收到钱包签名 — 签名弹窗可能被关掉了。链上没有任何变动。"
+      : "No signature arrived from the wallet — the popup may have been closed. Nothing was moved on-chain.",
+  walletSessionExpired: () =>
+    current === "zh"
+      ? "钱包会话已过期 — 点左下角钱包按钮,断开重连后再试。"
+      : "Your wallet session expired — click the wallet button (bottom left), disconnect, connect again, then retry.",
   contactSaved: (v) =>
     current === "zh"
       ? `已保存 — "${v.name}" 现在是 ${v.addr}。以后只要说"给 ${v.name} 转 20 USDC"就行。`

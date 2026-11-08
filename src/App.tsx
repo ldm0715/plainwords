@@ -43,7 +43,13 @@ import {
   uid,
   type Session,
 } from "@/lib/sessions"
-import { DEVNET_ENDPOINT, USDC_MINT, connection, getBalances } from "@/lib/solana"
+import {
+  DEVNET_ENDPOINT,
+  SIGN_WINDOW_CLOSED,
+  USDC_MINT,
+  connection,
+  getBalances,
+} from "@/lib/solana"
 import { getAssociatedTokenAddress } from "@solana/spl-token"
 import type {
   Balances,
@@ -700,6 +706,17 @@ function AppInner() {
           ? "Your wallet session expired — click the wallet button (bottom left), disconnect, connect again, then retry."
           : raw
         updateConfirm(id, { status: "failed", result: { ok: false, error: friendly } })
+        // The card is invisible to the LLM — without a chat message it would
+        // see an unanswered transfer request and may claim it succeeded.
+        pushAssistant(
+          /not connected/i.test(raw)
+            ? t("walletSessionExpired")
+            : /User rejected/i.test(raw)
+              ? t("signRejected")
+              : raw.includes(SIGN_WINDOW_CLOSED)
+                ? t("signTimeout")
+                : t("sendFailed", { err: raw }),
+        )
       }
     },
     [messages, publicKey, signTransaction, solPriceUsd, updateConfirm, refreshBalances, refreshHistory, pushAssistant],
@@ -715,8 +732,11 @@ function AppInner() {
           : undefined
       if (prog) prog.skipped++
       updateConfirm(id, { status: "cancelled" })
+      // The card is invisible to the LLM — without a chat message it would see
+      // an unanswered transfer request and may claim it succeeded.
+      pushAssistant(t("transferCancelled"))
     },
-    [messages, updateConfirm],
+    [messages, updateConfirm, pushAssistant],
   )
 
   // --- in-chat contact confirmation cards (LLM requests) ---
