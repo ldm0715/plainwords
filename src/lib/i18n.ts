@@ -214,8 +214,8 @@ const MESSAGES: Record<Key, (v: Record<string, string>) => string> = {
       : `You only have ${v.balance} ${v.asset} — not enough for that.`,
   zeroBalance: (v) =>
     current === "zh"
-      ? `你的 ${v.asset} 余额现在是零。(演示提示:去 faucets.solana.com 领 devnet SOL。)`
-      : `Your ${v.asset} balance is zero right now. (Demo tip: grab devnet SOL from faucets.solana.com.)`,
+      ? `你的 ${v.asset} 余额现在是零。(演示提示:去 faucet.solana.com 领 devnet SOL。)`
+      : `Your ${v.asset} balance is zero right now. (Demo tip: grab devnet SOL from faucet.solana.com.)`,
   allWouldLeaveNothing: (v) =>
     current === "zh"
       ? `全部转走会留不够网络费 — 至少保留 ${v.reserve} SOL。`

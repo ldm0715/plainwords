@@ -68,7 +68,7 @@ npm run dev            # 打开 http://localhost:5173
 | 需要 | 地址 |
 |---|---|
 | Phantom 切到 **Devnet** | https://phantom.app |
-| Devnet SOL | https://faucets.solana.com |
+| Devnet SOL | https://faucet.solana.com |
 | Devnet USDC | https://faucet.circle.com（选择 *Solana Devnet*） |
 
 ## 限制

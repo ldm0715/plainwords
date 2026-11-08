@@ -70,7 +70,7 @@ npm run dev            # open http://localhost:5173
 | Need | Where |
 |---|---|
 | Phantom set to **Devnet** | https://phantom.app |
-| Devnet SOL | https://faucets.solana.com |
+| Devnet SOL | https://faucet.solana.com |
 | Devnet USDC | https://faucet.circle.com (select *Solana Devnet*) |
 
 ## Limits

@@ -165,8 +165,8 @@ export function GuidePanel({ connected, connecting, onConnect }: Props) {
             </Step>
             <Step n={2} title={ui("Fund the wallet with test tokens", "给钱包领测试币")}>
               {ui("SOL from", "SOL 来自")}{" "}
-              <a href="https://faucets.solana.com" target="_blank" rel="noreferrer" className="underline underline-offset-2">
-                faucets.solana.com
+              <a href="https://faucet.solana.com" target="_blank" rel="noreferrer" className="underline underline-offset-2">
+                faucet.solana.com
               </a>
               {ui(", USDC from", "，USDC 来自")}{" "}
               <a href="https://faucet.circle.com" target="_blank" rel="noreferrer" className="underline underline-offset-2">
@@ -292,8 +292,8 @@ export function GuidePanel({ connected, connecting, onConnect }: Props) {
               "Everything runs on Solana devnet with test tokens (SOL from",
               "所有操作运行在 Solana devnet 测试网(SOL 来自",
             )}{" "}
-            <a href="https://faucets.solana.com" target="_blank" rel="noreferrer" className="underline underline-offset-2">
-              faucets.solana.com
+            <a href="https://faucet.solana.com" target="_blank" rel="noreferrer" className="underline underline-offset-2">
+              faucet.solana.com
             </a>
             {ui(", USDC from", ",USDC 来自")}
             <a href="https://faucet.circle.com" target="_blank" rel="noreferrer" className="underline underline-offset-2">

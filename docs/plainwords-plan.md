@@ -181,7 +181,7 @@ plainwords/
 ## 11. 常用链接
 
 - 比赛页:https://events.mlh.com/events/15200-solana-hackathon
-- 水龙头:https://faucets.solana.com(devnet,8h 2 次)
+- 水龙头:https://faucet.solana.com(devnet,8h 2 次)
 - 浏览器查账:https://solscan.io(切 Devnet)
 - Jupiter 文档:https://dev.jup.ag(quote/swap 端点,devnet)
 - wallet-adapter:https://github.com/anza-xyz/wallet-adapter

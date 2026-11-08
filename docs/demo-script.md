@@ -17,7 +17,7 @@ Target: 2:00–2:20, 1080p, English voiceover. All transfers happen on devnet; s
 Wallet and data:
 
 - [ ] Phantom unlocked, network = **Devnet**
-- [ ] Demo wallet has **≥ 2 SOL** (faucets.solana.com, request early)
+- [ ] Demo wallet has **≥ 2 SOL** (faucet.solana.com, request early)
 - [ ] Second Phantom account created → its address = **alice** (NOT in Contacts yet)
 - [ ] Generate a second address = **mon**:
       `node -e "const {Keypair}=require('@solana/web3.js');console.log(Keypair.generate().publicKey.toBase58())"`
