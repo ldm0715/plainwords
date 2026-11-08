@@ -9,7 +9,8 @@ export const config = { runtime: "edge" }
 const UPSTREAM = "https://open.bigmodel.cn/api/coding/paas/v4"
 
 export default async function handler(req: Request): Promise<Response> {
-  if (req.method !== "POST") {
+  // POST = chat/completions; GET = /models listing. Both forward as-is.
+  if (req.method !== "POST" && req.method !== "GET") {
     return new Response(JSON.stringify({ error: "method not allowed" }), {
       status: 405,
       headers: { "Content-Type": "application/json" },
