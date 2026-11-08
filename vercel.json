@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/llm/:path*",
+      "destination": "/api/llm"
+    },
+    {
       "source": "/llm/:path*",
       "destination": "https://open.bigmodel.cn/api/coding/paas/v4/:path*"
     },

@@ -17,8 +17,19 @@ export default async function handler(req: Request): Promise<Response> {
     })
   }
 
+  // Vercel maps this file to exactly /api/llm; vercel.json rewrites the
+  // subpaths here. Recover the upstream subpath from the URL, or from the
+  // `path` query param some rewrites produce, and fall back per method.
   const url = new URL(req.url)
-  const upstreamUrl = `${UPSTREAM}${url.pathname.replace(/^\/api\/llm/, "")}${url.search}`
+  const params = url.searchParams
+  const qp = params.get("path")
+  let sub = url.pathname.replace(/^\/api\/llm/, "")
+  if (!sub && qp) sub = `/${qp.replace(/^\/+/, "")}`
+  if (qp) params.delete("path")
+  if (!sub || sub === "/") sub = req.method === "GET" ? "/models" : "/chat/completions"
+
+  const search = params.toString()
+  const upstreamUrl = `${UPSTREAM}${sub}${search ? `?${search}` : ""}`
 
   // BYOK (in-app Settings) wins; otherwise the server key.
   const byok = req.headers.get("x-api-key")
@@ -34,16 +45,20 @@ export default async function handler(req: Request): Promise<Response> {
     )
   }
 
-  const upstream = await fetch(upstreamUrl, {
-    method: "POST",
+  const init: RequestInit = {
+    method: req.method,
     headers: {
-      "Content-Type": "application/json",
+      "Content-Type": req.headers.get("Content-Type") ?? "application/json",
       Authorization: auth,
     },
-    body: req.body,
+  }
+  if (req.method === "POST") {
+    init.body = req.body
     // @ts-expect-error — duplex is required by undici to stream a request body
-    duplex: "half",
-  })
+    init.duplex = "half"
+  }
+
+  const upstream = await fetch(upstreamUrl, init)
 
   // Stream the response straight through (chat completions can be slow).
   return new Response(upstream.body, {
