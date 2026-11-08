@@ -449,6 +449,7 @@ function AppInner() {
               asset: intent.asset,
               direction: intent.direction,
               counterpartyAddress: cpAddress,
+              signaturePrefix: intent.signature,
               days: intent.days,
               limit: intent.limit,
             })
@@ -459,6 +460,9 @@ function AppInner() {
               asset: r.asset,
               amount: Number(r.uiAmount.toFixed(6)),
               feeSOL: Number(r.feeSOL.toFixed(6)),
+              // full on-chain order id — the LLM correlates result messages
+              // (8-char prefix) against this; timestamps alone are ambiguous
+              signature: r.signature,
               time: new Date(r.blockTime * 1000).toISOString().slice(0, 16).replace("T", " "),
             }))
             // deterministic totals — the LLM quotes these, it never adds numbers itself

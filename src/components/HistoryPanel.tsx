@@ -67,7 +67,12 @@ export function HistoryPanel({ records, loading, contacts, onRefresh }: Props) {
     const needle = q.trim().toLowerCase()
     if (needle) {
       const name = byAddress.get(r.counterparty)?.toLowerCase() ?? ""
-      if (!r.counterparty.toLowerCase().includes(needle) && !name.includes(needle)) return false
+      if (
+        !r.counterparty.toLowerCase().includes(needle) &&
+        !name.includes(needle) &&
+        !r.signature.toLowerCase().includes(needle)
+      )
+        return false
     }
     return true
   })
@@ -106,8 +111,8 @@ export function HistoryPanel({ records, loading, contacts, onRefresh }: Props) {
             autoFocus
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder={ui("Search contact name or address…", "搜索联系人或地址…")}
-            aria-label={ui("Search by contact or address", "按联系人或地址搜索")}
+            placeholder={ui("Search contact, address or order id…", "搜索联系人、地址或订单号…")}
+            aria-label={ui("Search by contact, address or order id", "按联系人、地址或订单号搜索")}
           />
         )}
 
@@ -202,9 +207,10 @@ export function HistoryPanel({ records, loading, contacts, onRefresh }: Props) {
                     href={`https://solscan.io/tx/${r.signature}?cluster=devnet`}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5 text-[11px] underline-offset-2 hover:underline"
+                    title={ui("view on Solscan", "在 Solscan 查看")}
+                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-0.5 font-mono text-[11px] underline-offset-2 hover:underline"
                   >
-                    tx <ExternalLink className="size-2.5" />
+                    {r.signature.slice(0, 8)}… <ExternalLink className="size-2.5" />
                   </a>
                 </div>
               </div>

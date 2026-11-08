@@ -61,6 +61,7 @@ type Key =
   | "signRejected"
   | "signTimeout"
   | "walletSessionExpired"
+  | "orderSuffix"
   | "contactSaved"
   | "notInContactsNudge"
   | "somethingWentWrong"
@@ -191,6 +192,8 @@ const MESSAGES: Record<Key, (v: Record<string, string>) => string> = {
     current === "zh"
       ? "钱包会话已过期 — 点左下角钱包按钮,断开重连后再试。"
       : "Your wallet session expired — click the wallet button (bottom left), disconnect, connect again, then retry.",
+  orderSuffix: (v) =>
+    current === "zh" ? `(订单号 ${v.order})` : `(order ${v.order})`,
   contactSaved: (v) =>
     current === "zh"
       ? `已保存 — "${v.name}" 现在是 ${v.addr}。以后只要说"给 ${v.name} 转 20 USDC"就行。`

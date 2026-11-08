@@ -74,6 +74,8 @@ export interface QueryTransfersIntent {
   asset?: Asset
   direction?: "out" | "in"
   counterparty?: string
+  /** order id — transaction signature, full or the 8-char prefix shown in chat */
+  signature?: string
   days?: number
   limit?: number
 }

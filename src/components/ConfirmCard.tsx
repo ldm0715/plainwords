@@ -189,14 +189,21 @@ export function ConfirmCard({ message, onConfirm, onCancel }: Props) {
                 <CheckCircle2 className="size-4" /> {t("confirmedOnChain")}
               </div>
               {result?.signature && (
-                <a
-                  href={`https://solscan.io/tx/${result.signature}?cluster=devnet`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-mono text-xs underline-offset-2 hover:underline"
-                >
-                  {ui("view on Solscan", "在 Solscan 查看")} <ExternalLink className="size-3" />
-                </a>
+                <>
+                  {/* the on-chain signature IS the order id — printed as text so
+                      card, chat summary and history rows all quote the same id */}
+                  <div className="text-foreground font-mono text-xs">
+                    {ui(`order ${result.signature.slice(0, 8)}…`, `订单号 ${result.signature.slice(0, 8)}…`)}
+                  </div>
+                  <a
+                    href={`https://solscan.io/tx/${result.signature}?cluster=devnet`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 font-mono text-xs underline-offset-2 hover:underline"
+                  >
+                    {ui("view on Solscan", "在 Solscan 查看")} <ExternalLink className="size-3" />
+                  </a>
+                </>
               )}
             </div>
           )}

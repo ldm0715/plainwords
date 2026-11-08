@@ -276,6 +276,11 @@ const TOOLS: OpenAI.ChatCompletionTool[] = [
             type: "string",
             description: "Contact name or address to filter by (optional)",
           },
+          signature: {
+            type: "string",
+            description:
+              "Order id (transaction signature), full or the 8-char prefix shown in result messages. Use it to look up ONE specific transfer.",
+          },
           days: {
             type: "number",
             description: "Only include the last N days — use 1 for 'today', 7 for 'this week' (optional)",
@@ -401,6 +406,9 @@ function coerceIntent(name: string, raw: string): Intent | null {
     if (args.direction === "out" || args.direction === "in") intent.direction = args.direction
     if (typeof args.counterparty === "string" && args.counterparty.trim()) {
       intent.counterparty = args.counterparty.trim()
+    }
+    if (typeof args.signature === "string" && args.signature.trim()) {
+      intent.signature = args.signature.trim()
     }
     if (typeof args.limit === "number" && args.limit > 0) {
       intent.limit = Math.min(Math.floor(args.limit), 50)

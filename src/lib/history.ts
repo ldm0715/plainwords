@@ -299,6 +299,8 @@ export interface TransferFilter {
   direction?: "out" | "in"
   /** contact name (resolved to its address by the caller) or raw address */
   counterpartyAddress?: string
+  /** transaction signature — full id or the 8-char prefix shown in chat results */
+  signaturePrefix?: string
   /** only include records newer than N days */
   days?: number
   limit?: number
@@ -314,6 +316,11 @@ export function filterTransfers(
   if (filter.counterpartyAddress) {
     const target = filter.counterpartyAddress.toLowerCase()
     out = out.filter((r) => r.counterparty.toLowerCase() === target)
+  }
+  const sigPrefix = filter.signaturePrefix
+  if (sigPrefix) {
+    // order ids are quoted verbatim from result messages and cards — exact case
+    out = out.filter((r) => r.signature.startsWith(sigPrefix))
   }
   if (filter.days && filter.days > 0) {
     const cutoff = Date.now() / 1000 - filter.days * 86400

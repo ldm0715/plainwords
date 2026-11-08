@@ -192,7 +192,11 @@ export function templateSummary(action: PendingSend, result: ExecResult): string
   if (!result.ok) {
     return t("sendFailed", { err: result.error ?? "unknown error" })
   }
-  const sig = result.signature ? ` (tx ${result.signature.slice(0, 8)}…)` : ""
+  // The on-chain signature IS the order id; chat shows the 8-char prefix and
+  // query_transfers rows carry the full value for unambiguous correlation.
+  const sig = result.signature
+    ? ` ${t("orderSuffix", { order: `${result.signature.slice(0, 8)}…` })}`
+    : ""
   return t("sendDone", {
     amount: fmtAmount(action.asset, action.uiAmount),
     asset: action.asset,
