@@ -75,7 +75,7 @@ function saveCache(owner: PublicKey, records: TransferRecord[]): void {
  */
 export async function syncTransferHistory(
   owner: PublicKey,
-  fetchLimit = 20,
+  fetchLimit = 50,
 ): Promise<TransferRecord[]> {
   const cached = loadCachedHistory(owner)
   const seen = new Set(cached.map((r) => r.signature))
@@ -306,7 +306,8 @@ export interface TransferFilter {
   limit?: number
 }
 
-export function filterTransfers(
+/** Filter without truncation — totals and rankings must cover every match. */
+export function matchTransfers(
   records: TransferRecord[],
   filter: TransferFilter,
 ): TransferRecord[] {
@@ -326,6 +327,13 @@ export function filterTransfers(
     const cutoff = Date.now() / 1000 - filter.days * 86400
     out = out.filter((r) => r.blockTime >= cutoff)
   }
+  return out
+}
+
+export function filterTransfers(
+  records: TransferRecord[],
+  filter: TransferFilter,
+): TransferRecord[] {
   const limit = Math.min(Math.max(filter.limit ?? 10, 1), 50)
-  return out.slice(0, limit)
+  return matchTransfers(records, filter).slice(0, limit)
 }

@@ -27,7 +27,7 @@ import {
 } from "@/lib/contacts"
 import { executeSend, fmtAmount, resolveSend, resolveSwap, templateSummary } from "@/lib/pipeline"
 import {
-  filterTransfers,
+  matchTransfers,
   ingestSignatures,
   loadCachedHistory,
   syncTransferHistory,
@@ -487,14 +487,18 @@ function AppInner() {
               ? (contacts.find((c) => c.name === intent.counterparty!.toLowerCase())?.address ??
                 intent.counterparty)
               : undefined
-            const rows = filterTransfers(all, {
+            // Filter first, slice only for display: totals, counts and rankings
+            // must cover every match, otherwise "this week's total" silently
+            // shrinks to the display limit.
+            const matched = matchTransfers(all, {
               asset: intent.asset,
               direction: intent.direction,
               counterpartyAddress: cpAddress,
               signaturePrefix: intent.signature,
               days: intent.days,
-              limit: intent.limit,
             })
+            const limit = Math.min(Math.max(intent.limit ?? 10, 1), 50)
+            const rows = matched.slice(0, limit)
             const nameByAddr = new Map(contacts.map((c) => [c.address, c.name]))
             const data = rows.map((r) => ({
               direction: r.outgoing ? "out" : "in",
@@ -510,22 +514,22 @@ function AppInner() {
             // deterministic totals — the LLM quotes these, it never adds numbers itself
             const total = (asset: "SOL" | "USDC", out: boolean) =>
               Number(
-                rows
+                matched
                   .filter((r) => r.asset === asset && r.outgoing === out)
                   .reduce((s, r) => s + r.uiAmount, 0)
                   .toFixed(6),
               )
-            const sentFeeSOL = Number(rows.reduce((s, r) => s + (r.outgoing ? r.feeSOL : 0), 0).toFixed(6))
+            const sentFeeSOL = Number(matched.reduce((s, r) => s + (r.outgoing ? r.feeSOL : 0), 0).toFixed(6))
             const solP = solPriceUsd ?? null
             // Ranked view for "largest / smallest / top N" questions — sorting
             // is deterministic code, so the model never compares numbers. The
             // chronological `transfers` list stays untouched for recency.
             const usdOf = (r: TransferRecord) =>
               r.asset === "SOL" ? r.uiAmount * (solP ?? 0) : r.uiAmount
-            const sameAsset = rows.length > 0 && rows.every((r) => r.asset === rows[0].asset)
+            const sameAsset = matched.length > 0 && matched.every((r) => r.asset === matched[0].asset)
             const ranked =
               solP !== null || sameAsset
-                ? [...rows]
+                ? [...matched]
                     .sort((a, b) =>
                       solP !== null ? usdOf(b) - usdOf(a) : b.uiAmount - a.uiAmount,
                     )
@@ -543,7 +547,7 @@ function AppInner() {
                     }))
                 : []
             const summary = {
-              matched: rows.length,
+              matched: matched.length,
               sent: {
                 SOL: total("SOL", true),
                 USDC: total("USDC", true),
@@ -564,12 +568,12 @@ function AppInner() {
                 toolCallId: item.toolCallId ?? "",
                 toolName: "query_transfers",
                 toolArgs: intent,
-                result: { count: rows.length, summary, transfers: data },
+                result: { count: matched.length, returned: rows.length, summary, transfers: data },
               })
-              pushAssistant(answer || `Found ${rows.length} transfer(s).`)
+              pushAssistant(answer || `Found ${matched.length} transfer(s).`)
             } catch {
               // deterministic fallback when the LLM round-trip fails
-              if (!rows.length) {
+              if (!matched.length) {
                 pushAssistant(t("historyEmpty"))
               } else {
                 const lines = rows
