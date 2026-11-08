@@ -76,6 +76,34 @@ function WalletProviders({ children }: { children: React.ReactNode }) {
   )
 }
 
+/** Shared "connect a wallet first" prompt for wallet-gated areas. */
+function ConnectCard({
+  title,
+  body,
+  connecting,
+  onConnect,
+}: {
+  title: string
+  body: string
+  connecting: boolean
+  onConnect: () => void
+}) {
+  return (
+    <div className="mx-auto flex max-w-md flex-col items-center gap-3 text-center">
+      <span className="bg-muted text-muted-foreground flex size-10 items-center justify-center rounded-full">
+        <Wallet className="size-5" />
+      </span>
+      <div>
+        <p className="text-sm font-medium">{title}</p>
+        <p className="text-muted-foreground mt-1 text-xs leading-relaxed">{body}</p>
+      </div>
+      <Button onClick={onConnect} disabled={connecting}>
+        {connecting ? ui("Connecting…", "连接中…") : ui("Connect wallet", "连接钱包")}
+      </Button>
+    </div>
+  )
+}
+
 function AppInner() {
   const { publicKey, signTransaction, connected, connecting } = useWallet()
   const { setVisible: openWalletModal } = useWalletModal()
@@ -886,25 +914,15 @@ function AppInner() {
               <ChatInput onSend={handleSend} disabled={busy} />
             ) : (
               <div className="border-t bg-card px-4 py-5">
-                <div className="mx-auto flex max-w-md flex-col items-center gap-3 text-center">
-                  <span className="bg-muted text-muted-foreground flex size-10 items-center justify-center rounded-full">
-                    <Wallet className="size-5" />
-                  </span>
-                  <div>
-                    <p className="text-sm font-medium">
-                      {ui("Connect your wallet to start", "先连接钱包再开始")}
-                    </p>
-                    <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
-                      {ui(
-                        "PlainWords reads balances and prepares transactions for you. Connect Phantom on Devnet — signing happens in the wallet, keys never leave it.",
-                        "PlainWords 需要读取余额并为你准备交易。连接切到 Devnet 的 Phantom —— 签名在钱包里完成，私钥不会离开钱包。",
-                      )}
-                    </p>
-                  </div>
-                  <Button onClick={() => openWalletModal(true)} disabled={connecting}>
-                    {connecting ? ui("Connecting…", "连接中…") : ui("Connect wallet", "连接钱包")}
-                  </Button>
-                </div>
+                <ConnectCard
+                  title={ui("Connect your wallet to start", "先连接钱包再开始")}
+                  body={ui(
+                    "PlainWords reads balances and prepares transactions for you. Connect Phantom on Devnet — signing happens in the wallet, keys never leave it.",
+                    "PlainWords 需要读取余额并为你准备交易。连接切到 Devnet 的 Phantom —— 签名在钱包里完成，私钥不会离开钱包。",
+                  )}
+                  connecting={connecting}
+                  onConnect={() => openWalletModal(true)}
+                />
               </div>
             )}
           </>
@@ -929,25 +947,39 @@ function AppInner() {
             onRefresh={refreshHistory}
           />
         ) : tab === "contacts" ? (
-          <ContactsPanel
-            contacts={contacts}
-            onAdd={handleAddContact}
-            onRequestEdit={(originalName, newName, newAddress, currentAddress, newDescription) =>
-              setContactAction({
-                op: "edit",
-                originalName,
-                newName,
-                newAddress,
-                newDescription,
-                currentAddress,
-                currentDescription: contacts.find((c) => c.name === originalName)?.description,
-              })
-            }
-            onRequestRemove={(name, address) =>
-              setContactAction({ op: "remove", originalName: name, currentAddress: address })
-            }
-            onRequestSend={(c) => setSendFor(c)}
-          />
+          walletReady ? (
+            <ContactsPanel
+              contacts={contacts}
+              onAdd={handleAddContact}
+              onRequestEdit={(originalName, newName, newAddress, currentAddress, newDescription) =>
+                setContactAction({
+                  op: "edit",
+                  originalName,
+                  newName,
+                  newAddress,
+                  newDescription,
+                  currentAddress,
+                  currentDescription: contacts.find((c) => c.name === originalName)?.description,
+                })
+              }
+              onRequestRemove={(name, address) =>
+                setContactAction({ op: "remove", originalName: name, currentAddress: address })
+              }
+              onRequestSend={(c) => setSendFor(c)}
+            />
+          ) : (
+            <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+              <ConnectCard
+                title={ui("Connect your wallet to manage contacts", "连接钱包后管理联系人")}
+                body={ui(
+                  "Contacts are stored per wallet, so PlainWords needs to know which wallet you're using. Connect Phantom on Devnet to add, edit or send.",
+                  "联系人按钱包隔离存储，PlainWords 需要知道你在用哪个钱包。连接切到 Devnet 的 Phantom 后即可添加、编辑或转账。",
+                )}
+                connecting={connecting}
+                onConnect={() => openWalletModal(true)}
+              />
+            </div>
+          )
         ) : (
           <GuidePanel />
         )}

@@ -138,7 +138,7 @@ export function ContactsPanel({
                   </div>
                 </div>
               ) : (
-                /* display mode — send/edit/remove always visible */
+                /* display mode — send/edit/remove */
                 <div
                   key={c.name}
                   className="flex items-center justify-between gap-3 rounded-lg border px-4 py-2.5"
