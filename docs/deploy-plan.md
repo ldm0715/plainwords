@@ -49,7 +49,7 @@
 |---|---|---|
 | `ZHIPU_API_KEY` | Vercel → Settings → Environment Variables | Edge Function 注入上游鉴权;**不进仓库** |
 | `VITE_LLM_KEY` | 本地 `.env` | 仅本地 dev;线上不读 |
-| `VITE_LLM_MODEL` | 两边 | 模型名(线上默认建议 `glm-4-flash`) |
+| `VITE_LLM_MODEL` | 两边 | 模型名(线上默认 `glm-5.3-flash`) |
 | — | — | `VITE_LLM_EXTRA_HEADERS`(opencode session 头)在直连智谱后**可弃** |
 
 ## 5. LLM 配置讨论点(执行时定)

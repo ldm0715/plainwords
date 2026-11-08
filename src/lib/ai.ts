@@ -32,7 +32,7 @@ function resolveBaseUrl(raw: string): string {
 const ENV_BASE_URL = resolveBaseUrl(
   import.meta.env.VITE_LLM_BASE_URL || "https://open.bigmodel.cn/api/paas/v4",
 )
-const ENV_MODEL = import.meta.env.VITE_LLM_MODEL || "glm-4.6"
+const ENV_MODEL = import.meta.env.VITE_LLM_MODEL || "glm-5.3-flash"
 
 // Optional extra headers for gateways that need them, e.g. opencode.ai zen
 // requires {"x-opencode-session":"<id>"}.
