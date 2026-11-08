@@ -76,7 +76,7 @@ function saveCache(owner: PublicKey, records: TransferRecord[]): void {
 export async function syncTransferHistory(
   owner: PublicKey,
   fetchLimit = 50,
-): Promise<TransferRecord[]> {
+): Promise<{ records: TransferRecord[]; capped: boolean }> {
   const cached = loadCachedHistory(owner)
   const seen = new Set(cached.map((r) => r.signature))
 
@@ -91,7 +91,10 @@ export async function syncTransferHistory(
     }
   }
 
-  const mergeSigs = async (): Promise<ConfirmedSignatureInfo[]> => {
+  const mergeSigs = async (): Promise<{
+    sigs: ConfirmedSignatureInfo[]
+    capped: boolean
+  }> => {
     const walletSigs = await fetchSigs(owner)
     const ata = await getAssociatedTokenAddress(USDC_MINT, owner)
     const ataSigs = await fetchSigs(ata)
@@ -99,10 +102,14 @@ export async function syncTransferHistory(
     for (const s of [...walletSigs, ...ataSigs]) {
       if (!map.has(s.signature)) map.set(s.signature, s)
     }
-    return [...map.values()].sort((a, b) => (b.blockTime ?? 0) - (a.blockTime ?? 0))
+    return {
+      sigs: [...map.values()].sort((a, b) => (b.blockTime ?? 0) - (a.blockTime ?? 0)),
+      // A full page means older signatures may exist beyond what we scanned.
+      capped: walletSigs.length >= fetchLimit || ataSigs.length >= fetchLimit,
+    }
   }
 
-  let sigs = await mergeSigs()
+  let { sigs, capped } = await mergeSigs()
 
   // The load-balanced public devnet RPC sometimes lands on a node with a
   // degraded signature index and returns a fraction of the list. If the
@@ -111,7 +118,10 @@ export async function syncTransferHistory(
   if (sigs.length < cached.length) {
     await new Promise((r) => setTimeout(r, 600))
     const retry = await mergeSigs()
-    if (retry.length > sigs.length) sigs = retry
+    if (retry.sigs.length > sigs.length) {
+      sigs = retry.sigs
+      capped = retry.capped
+    }
   }
 
   const fresh: TransferRecord[] = []
@@ -138,14 +148,14 @@ export async function syncTransferHistory(
     await new Promise((r) => setTimeout(r, 400))
   }
 
-  if (!fresh.length) return cached
+  if (!fresh.length) return { records: cached, capped }
 
   // newest first (sig list is newest-first already), merge + trim
   const merged = [...fresh, ...cached]
     .sort((a, b) => b.blockTime - a.blockTime)
     .slice(0, MAX_CACHED)
   saveCache(owner, merged)
-  return merged
+  return { records: merged, capped }
 }
 
 /**

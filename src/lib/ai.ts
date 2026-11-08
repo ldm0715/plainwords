@@ -164,7 +164,7 @@ const TOOLS: OpenAI.ChatCompletionTool[] = [
     function: {
       name: "get_balance",
       description:
-        "Show the user's current SOL and USDC balances. Call when they ask how much they have.",
+        "Show the user's current SOL and USDC balances — these are the complete balances for the two supported assets. Call when they ask how much they have.",
       parameters: { type: "object", properties: {}, required: [] },
     },
   },
@@ -173,7 +173,7 @@ const TOOLS: OpenAI.ChatCompletionTool[] = [
     function: {
       name: "get_price",
       description:
-        "Live SOL/USDC price. Call when the user asks what SOL or USDC is worth in the other asset, e.g. \"SOL 现在多少 U?\", \"what's 0.5 SOL in USDC?\". Read-only — no confirmation needed.",
+        "Live Jupiter SOL/USDC quote — an estimate, not a guaranteed execution price. Call when the user asks what SOL or USDC is worth in the other asset, e.g. \"SOL 现在多少 U?\", \"what's 0.5 SOL in USDC?\". Read-only — no confirmation needed.",
       parameters: {
         type: "object",
         properties: {
@@ -196,7 +196,7 @@ const TOOLS: OpenAI.ChatCompletionTool[] = [
     function: {
       name: "swap_tokens",
       description:
-        "Swap between SOL and USDC. Use mode 'half' for 'half of it', 'all' for 'everything', 'amount' only when the user said an exact number.",
+        "Swap between SOL and USDC. Use mode 'half' for 'half of it', 'all' for 'everything', 'amount' only when the user said an exact number. This only opens a quote/confirmation card — nothing executes until the user confirms. On devnet swaps are quote-only (no settlement); on mainnet the same card executes.",
       parameters: {
         type: "object",
         properties: {
@@ -218,7 +218,7 @@ const TOOLS: OpenAI.ChatCompletionTool[] = [
     function: {
       name: "send_payment",
       description:
-        "Send SOL or USDC to a Solana address. Use mode 'half' for 'half of it', 'all' for 'everything', 'amount' only when the user said an exact number.",
+        "Send SOL or USDC to a Solana address. Use mode 'half' for 'half of it', 'all' for 'everything', 'amount' only when the user said an exact number. This only opens a confirmation card — the transfer executes after the user confirms and signs.",
       parameters: {
         type: "object",
         properties: {
@@ -288,7 +288,10 @@ const TOOLS: OpenAI.ChatCompletionTool[] = [
     function: {
       name: "query_transfers",
       description:
-        "Look up the user's saved transfer history (SOL/USDC in & out). Call for questions like \"who did I send to?\", \"how much did I send to fat?\", \"最近的转账记录\". The result is returned to you as data — then summarize it in the user's language.",
+        "Look up the user's SOL/USDC transfer history (in and out). Use for questions like \"who did I send to?\", \"how much did I send to fat?\", \"这周花了多少钱\", \"最大的一笔是多少\". The result is data for you to summarize in the user's language. " +
+        "Fields: `count` = matching transfers in the loaded history; `returned` = rows in `transfers` (a display list only, may be smaller than `count`); `summary` = totals over ALL matches — `matched`, `sent`/`received` sums and fees, USD estimates, and `ranked` (every match sorted by USD value, largest first); `coverage` = `loaded`, `oldestLoaded`, and `partial` (true means older transfers inside the requested window may not be scanned yet). " +
+        "History is synced from the chain on wallet connect: roughly the latest 50 signatures per address, cache up to 100 transfers, SOL/USDC only. " +
+        "Never count, sum, convert or sort yourself — read `summary` and `ranked`. If `coverage.partial` is true, say the totals are based on the latest available transfers; never present them as a complete week/all-time total.",
       parameters: {
         type: "object",
         properties: {
@@ -300,7 +303,7 @@ const TOOLS: OpenAI.ChatCompletionTool[] = [
           },
           counterparty: {
             type: "string",
-            description: "Contact name or address to filter by (optional)",
+            description: "Contact name or exact address to filter by (optional)",
           },
           signature: {
             type: "string",
@@ -309,9 +312,14 @@ const TOOLS: OpenAI.ChatCompletionTool[] = [
           },
           days: {
             type: "number",
-            description: "Only include the last N days — use 1 for 'today', 7 for 'this week' (optional)",
+            description:
+              "Only the last N days (1–365). Use 1 for 'today', 7 for 'this week' (optional)",
           },
-          limit: { type: "number", description: "Max records, default 10 (optional)" },
+          limit: {
+            type: "number",
+            description:
+              "Display list size only, 1–50 (default 10). Totals always cover every match (optional)",
+          },
         },
         required: [],
       },

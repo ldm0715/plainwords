@@ -248,6 +248,8 @@ function AppInner() {
   // --- on-chain transfer history ---
   const [history, setHistory] = useState<TransferRecord[] | null>(null)
   const [historyLoading, setHistoryLoading] = useState(false)
+  // true when the last sync hit the signature-scan cap — older transfers may exist
+  const [historyCapped, setHistoryCapped] = useState(false)
 
   // History sync is rate-limited on purpose (devnet 429s): only runs on wallet
   // change / after a confirmed transfer / manual Refresh, throttled to 30s,
@@ -258,6 +260,7 @@ function AppInner() {
     async (opts?: { force?: boolean; manual?: boolean }) => {
       if (!publicKey) {
         setHistory(null)
+        setHistoryCapped(false)
         return
       }
       const now = Date.now()
@@ -273,7 +276,8 @@ function AppInner() {
       setHistoryLoading(true)
       try {
         // cache-first: instant paint from localStorage, then parse only NEW txs
-        const next = await syncTransferHistory(publicKey)
+        const { records: next, capped } = await syncTransferHistory(publicKey)
+        setHistoryCapped(capped)
         setHistory((prev) => {
           if (
             prev &&
@@ -499,6 +503,29 @@ function AppInner() {
             })
             const limit = Math.min(Math.max(intent.limit ?? 10, 1), 50)
             const rows = matched.slice(0, limit)
+            // Coverage metadata: history is synced newest-first from a capped
+            // signature scan, so the model must know when older matches may be
+            // missing instead of assuming the totals are complete.
+            const oldestLoaded =
+              all.length > 0 ? Math.min(...all.map((r) => r.blockTime)) : null
+            const windowStart =
+              intent.days && intent.days > 0
+                ? Date.now() / 1000 - intent.days * 86400
+                : null
+            const coverage = {
+              loaded: all.length,
+              oldestLoaded:
+                oldestLoaded === null
+                  ? null
+                  : new Date(oldestLoaded * 1000)
+                      .toISOString()
+                      .slice(0, 16)
+                      .replace("T", " "),
+              partial:
+                historyCapped &&
+                oldestLoaded !== null &&
+                (windowStart === null || oldestLoaded > windowStart),
+            }
             const nameByAddr = new Map(contacts.map((c) => [c.address, c.name]))
             const data = rows.map((r) => ({
               direction: r.outgoing ? "out" : "in",
@@ -568,7 +595,7 @@ function AppInner() {
                 toolCallId: item.toolCallId ?? "",
                 toolName: "query_transfers",
                 toolArgs: intent,
-                result: { count: matched.length, returned: rows.length, summary, transfers: data },
+                result: { count: matched.length, returned: rows.length, coverage, summary, transfers: data },
               })
               pushAssistant(answer || `Found ${matched.length} transfer(s).`)
             } catch {
