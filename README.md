@@ -1,71 +1,89 @@
 # PlainWords
 
-> The wallet that speaks your language. Say **"swap half my SOL into USDC"** — PlainWords understands the intent, computes the exact amount, checks the risks, simulates the transaction, and asks for one-tap confirmation.
+[中文说明](README.zh.md)
 
-Built for the [Solana Hackathon x MLH](https://events.mlh.com/events/15200-solana-hackathon) — AI Track.
+Operate a Solana wallet in plain language — say what you want, confirm once, sign in Phantom.
 
-## Why it must be Solana
+| | |
+|---|---|
+| **Live demo** | https://plainwords-chi.vercel.app (Phantom on **Devnet**) |
+| **Event** | [Solana Hackathon x MLH](https://events.mlh.com/events/15200-solana-hackathon) — AI Track / DeFi Track |
+| **Network** | Solana Devnet · SOL and USDC |
 
-- **Sub-cent fees** — conversational micro-payments (0.01 USDC) only make economic sense at ~$0.0001 per transaction.
-- **~400ms confirmations** — a chat-driven flow needs the "sent" moment to feel instant.
+## What it does
 
-## Architecture — three rules the demo lives by
+| You say | PlainWords does |
+|---|---|
+| "send 20 USDC to alice" | resolves the contact, scores risk, simulates the transfer, asks for one confirmation, signs in Phantom |
+| "send 0.01 SOL and 0.01 USDC to `<address>`" | prepares both transfers in one turn, each with its own confirm card |
+| "swap half my SOL" | shows a live mainnet quote with full risk and confirmation UI — quote-only on devnet |
+| "how much did I send alice this week?" | answers from parsed on-chain history, with totals computed in code |
+| "remember alice as `<address>`" | saves the contact locally, isolated per connected wallet |
 
-1. **AI handles meaning, code handles math.** The LLM only outputs semantics like `mode: "half"`. Every amount is computed deterministically from the on-chain balance.
-2. **The confirmation card is the only gate.** Nothing reaches the chain until the user confirms. Declined ⇒ zero on-chain changes.
-3. **Dual-track risk control.** The LLM flags semantic red flags (`risk_flags`: drain-everything, pressure tactics, promises of returns); deterministic code checks the numbers (share of balance, session totals, blocklists). Either track escalates the confirmation level: 🟢 light → 🟡 standard → 🔴 type-CONFIRM.
+## How it works
 
-## Stack
+```
+your words
+  → LLM intent (no arithmetic, no signing)
+    → deterministic amount resolution
+      → risk score + transaction simulation
+        → confirmation card (only gate to the chain)
+          → Phantom signature → Solana devnet
+```
+
+| Layer | Responsibility |
+|---|---|
+| **LLM (GLM)** | intent and amount expression (`half`, `all`, `20`, or an exact number), plus semantic risk flags — never math, never signing |
+| **Deterministic code** | resolves amounts against the on-chain balance, numeric risk checks, transaction simulation and building |
+| **User** | confirms on the card (red-level actions require typing `CONFIRM`) and signs in the wallet |
+
+Sub-cent fees and ~1s settlement are what make conversational micro-payments viable at all — that is the Solana part of the product.
+
+## Tech stack
 
 | Layer | Choice |
 |---|---|
-| Frontend | Vite + React + TypeScript + Tailwind CSS v4 + shadcn/ui |
-| LLM | GLM (Zhipu) via `openai` npm package, OpenAI-compatible endpoint, function calling |
-| Chain | `@solana/web3.js` + wallet-adapter + Phantom (devnet) |
-| Swap | Jupiter Aggregator REST API (devnet) |
-| Prices | CoinGecko simple price |
+| **UI** | Vite · React · TypeScript · Tailwind v4 · shadcn/ui |
+| **AI** | GLM (Zhipu) via the OpenAI-compatible function-calling API |
+| **Solana** | `@solana/web3.js` · wallet-adapter · Phantom |
+| **Quotes** | Jupiter Swap API — live mainnet quotes |
+| **Deploy** | Vercel · Edge Function injects the server-side LLM key |
+
+## AI tools used to build it
+
+The app itself runs on GLM. These tools were used during development:
+
+| Tool | Model | Role |
+|---|---|---|
+| **zcode** | GLM-5.3 | Initial implementation — wallet layer, intent pipeline, UI |
+| **Claude Code** | DeepSeek-v4.1-flash | Deployment debugging, LLM proxy, README and cleanup |
+
 
 ## Run locally
 
-### 1. Wallet (Phantom)
-
-PlainWords talks to your wallet through [Phantom](https://phantom.app) — install the browser
-extension, then switch it to **Devnet** (Settings → Developer Settings → Testnet Mode).
-
-Fund your devnet wallet with test tokens:
-
-- SOL: [faucets.solana.com](https://faucets.solana.com)
-- USDC: [faucet.circle.com](https://faucet.circle.com) (select *Solana Devnet*)
-
-When you open the app, click **Select Wallet** — Phantom appears automatically (marked
-"Detected"); after the first approval it reconnects on its own.
-
-> Any Wallet-Standard wallet works (Solflare, Backpack…), but the demo assumes Phantom.
-
-### 2. App
-
 ```bash
 npm install
-cp .env.example .env   # then fill in VITE_LLM_KEY from https://open.bigmodel.cn
-npm run dev
+cp .env.example .env   # then add an LLM key (any OpenAI-compatible endpoint; GLM by default)
+npm run dev            # open http://localhost:5173
 ```
 
-`.env` supports **any OpenAI-compatible endpoint** (`VITE_LLM_BASE_URL` / `VITE_LLM_MODEL`) —
-GLM is just the default. The key stays in your `.env`, which is gitignored and never committed.
+| Need | Where |
+|---|---|
+| Phantom set to **Devnet** | https://phantom.app |
+| Devnet SOL | https://faucets.solana.com |
+| Devnet USDC | https://faucet.circle.com (select *Solana Devnet*) |
 
-Supported assets: **SOL** and **USDC** on devnet.
+## Limits
 
-## Project layout
+- Devnet only, SOL/USDC only. Swap is quote-only because Jupiter no longer serves devnet liquidity.
+- Contacts, chat sessions, and history cache live in `localStorage`, keyed by wallet address. Private keys never enter the app.
+- The LLM key is injected by a Vercel Edge Function in production and by the Vite proxy locally; users can also bring their own key in Settings.
 
-```
-src/
-├── components/   # Sidebar, ChatWindow, ChatInput, ConfirmCard, GuidePanel, BalanceCards
-├── lib/
-│   ├── ai.ts         # GLM client, tools schema, intent parsing + summarizing
-│   ├── pipeline.ts   # deterministic amount resolution, execution
-│   ├── risk.ts       # dual-track risk assessment → confirm level
-│   ├── solana.ts     # connection, balances, tx building, simulation
-│   ├── jupiter.ts    # quote + swap REST wrappers
-│   └── price.ts      # SOL/USD spot for display
-└── prompts/system.md # assistant rules + few-shot examples
-```
+## Docs
+
+- [Product and architecture notes](docs/plainwords-plan.md)
+- [Deployment notes](docs/deploy-plan.md)
+
+## License
+
+MIT — see [LICENSE](LICENSE).
