@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/llm/:path*",
+      "destination": "https://open.bigmodel.cn/api/coding/paas/v4/:path*"
+    },
+    {
+      "source": "/jup/:path*",
+      "destination": "https://lite-api.jup.ag/:path*"
+    }
+  ]
+}
