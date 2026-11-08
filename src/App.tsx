@@ -517,6 +517,31 @@ function AppInner() {
               )
             const sentFeeSOL = Number(rows.reduce((s, r) => s + (r.outgoing ? r.feeSOL : 0), 0).toFixed(6))
             const solP = solPriceUsd ?? null
+            // Ranked view for "largest / smallest / top N" questions — sorting
+            // is deterministic code, so the model never compares numbers. The
+            // chronological `transfers` list stays untouched for recency.
+            const usdOf = (r: TransferRecord) =>
+              r.asset === "SOL" ? r.uiAmount * (solP ?? 0) : r.uiAmount
+            const sameAsset = rows.length > 0 && rows.every((r) => r.asset === rows[0].asset)
+            const ranked =
+              solP !== null || sameAsset
+                ? [...rows]
+                    .sort((a, b) =>
+                      solP !== null ? usdOf(b) - usdOf(a) : b.uiAmount - a.uiAmount,
+                    )
+                    .map((r) => ({
+                      direction: r.outgoing ? "out" : "in",
+                      asset: r.asset,
+                      amount: Number(r.uiAmount.toFixed(6)),
+                      counterparty: nameByAddr.get(r.counterparty) ?? r.counterparty,
+                      time: new Date(r.blockTime * 1000)
+                        .toISOString()
+                        .slice(0, 16)
+                        .replace("T", " "),
+                      signature: r.signature,
+                      ...(solP !== null ? { usdEstimate: +usdOf(r).toFixed(2) } : {}),
+                    }))
+                : []
             const summary = {
               matched: rows.length,
               sent: {
@@ -530,6 +555,8 @@ function AppInner() {
                 USDC: total("USDC", false),
                 ...(solP !== null ? { usdEstimate: +(total("SOL", false) * solP + total("USDC", false)).toFixed(2) } : {}),
               },
+              // Sorted by USD value, largest first; last entry is the smallest.
+              ranked,
             }
             try {
               const answer = await answerWithToolResult({
