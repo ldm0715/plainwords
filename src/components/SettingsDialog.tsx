@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { getUILang, setUILang, ui, type Lang } from "@/lib/i18n"
-import { applyLLMConfig, fetchModels, getLLMConfig, loadLLMConfig } from "@/lib/ai"
+import { applyLLMConfig, fetchModels, getLLMConfig, loadLLMConfig, SERVER_KEY_PLACEHOLDER } from "@/lib/ai"
 
 interface Props {
   open: boolean
@@ -54,7 +54,8 @@ export function SettingsDialog({ open, onClose, onChange }: Props) {
     if (!open) return
     const cfg = getLLMConfig()
     setBaseUrl(cfg.baseUrl)
-    setApiKey(cfg.apiKey)
+    // Never prefill the sentinel: leaving the field empty means "use the server key".
+    setApiKey(cfg.apiKey === SERVER_KEY_PLACEHOLDER ? "" : cfg.apiKey)
     setModel(cfg.model)
     setModels([])
     setModelsError(null)
@@ -200,7 +201,7 @@ export function SettingsDialog({ open, onClose, onChange }: Props) {
                 type="button"
                 aria-label={ui("Fetch model list", "获取模型列表")}
                 title={ui("Fetch model list", "获取模型列表")}
-                disabled={!baseUrl.trim() || !apiKey.trim() || loadingModels}
+                disabled={!baseUrl.trim() || loadingModels}
                 onClick={loadModels}
                 className="text-muted-foreground hover:text-foreground absolute top-1/2 right-2 -translate-y-1/2 disabled:opacity-40"
               >

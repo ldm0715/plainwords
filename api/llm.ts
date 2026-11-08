@@ -33,8 +33,10 @@ export default async function handler(req: Request): Promise<Response> {
   const search = params.toString()
   const upstreamUrl = `${UPSTREAM}${sub}${search ? `?${search}` : ""}`
 
-  // BYOK (in-app Settings) wins; otherwise the server key.
-  const byok = req.headers.get("x-api-key")
+  // BYOK (in-app Settings) wins; otherwise the server key. Ignore the
+  // client-side sentinel that stands in for "use the server key".
+  const rawByok = req.headers.get("x-api-key")
+  const byok = rawByok && rawByok !== "server-managed" ? rawByok : null
   const serverKey = process.env.ZHIPU_API_KEY
   const auth = byok ? `Bearer ${byok}` : serverKey ? `Bearer ${serverKey}` : null
 

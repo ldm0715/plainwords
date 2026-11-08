@@ -56,6 +56,9 @@ export interface LLMConfig {
 
 const LLM_CFG_KEY = "plainwords:llmConfig"
 
+/** Sentinel shown in Settings when requests use the server-side key. */
+export const SERVER_KEY_PLACEHOLDER = "server-managed"
+
 export function loadLLMConfig(): Partial<LLMConfig> {
   try {
     const raw = localStorage.getItem(LLM_CFG_KEY)
@@ -103,7 +106,7 @@ export function getLLMConfig(): LLMConfig {
   if (isProd) {
     return {
       baseUrl: saved.baseUrl || resolveBaseUrl("/api/llm"),
-      apiKey: saved.apiKey || "server-managed",
+      apiKey: saved.apiKey || SERVER_KEY_PLACEHOLDER,
       model: saved.model || ENV_MODEL,
     }
   }
@@ -115,7 +118,9 @@ export function getLLMConfig(): LLMConfig {
 }
 
 function savedApiKey(): string | undefined {
-  return loadLLMConfig().apiKey
+  const key = loadLLMConfig().apiKey
+  // The placeholder is not a real key — never forward it as BYOK.
+  return key && key !== SERVER_KEY_PLACEHOLDER ? key : undefined
 }
 
 /** Rebuild the client after the user changes settings. */
