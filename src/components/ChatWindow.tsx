@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react"
 import { Loader2 } from "lucide-react"
 import { ContactConfirmCard } from "@/components/ContactConfirmCard"
 import { ConfirmCard } from "@/components/ConfirmCard"
+import { Markdown } from "@/components/Markdown"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import type { ChatMessage as Msg } from "@/lib/types"
 
@@ -44,8 +45,8 @@ export function ChatWindow({
           if (m.role === "assistant") {
             return (
               <div key={m.id} className="flex justify-start">
-                <div className="bg-muted max-w-[85%] rounded-2xl rounded-bl-md px-3.5 py-2 text-sm whitespace-pre-wrap">
-                  {m.text}
+                <div className="bg-muted min-w-0 max-w-[85%] rounded-2xl rounded-bl-md px-3.5 py-2 text-sm">
+                  <Markdown text={m.text} />
                 </div>
               </div>
             )
