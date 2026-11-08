@@ -53,6 +53,10 @@ type Key =
   | "balance"
   | "price"
   | "priceUnavailable"
+  | "pendingBatch"
+  | "batchPartial"
+  | "batchDone"
+  | "batchMixed"
   | "contactSaved"
   | "notInContactsNudge"
   | "somethingWentWrong"
@@ -151,6 +155,22 @@ const MESSAGES: Record<Key, (v: Record<string, string>) => string> = {
     current === "zh"
       ? "现在拿不到实时价格,稍后再试。"
       : "I can't get a live price right now — try again in a moment.",
+  pendingBatch: (v) =>
+    current === "zh"
+      ? `共 ${v.count} 笔转账,请逐笔确认。`
+      : `${v.count} transfers ready — please confirm each one.`,
+  batchPartial: (v) =>
+    current === "zh"
+      ? `本批共 ${v.total} 笔,已完成 ${v.done} 笔 — 还有 ${v.remaining} 笔待确认。`
+      : `${v.done} of ${v.total} done — ${v.remaining} still awaiting your confirmation.`,
+  batchDone: (v) =>
+    current === "zh"
+      ? `本批 ${v.total} 笔已全部完成。`
+      : `All ${v.total} transfers in this batch are done.`,
+  batchMixed: (v) =>
+    current === "zh"
+      ? `本批 ${v.total} 笔已处理完毕 — ${v.done} 笔成功,${v.skipped} 笔未执行。`
+      : `Batch finished: ${v.done} succeeded, ${v.skipped} not executed.`,
   contactSaved: (v) =>
     current === "zh"
       ? `已保存 — "${v.name}" 现在是 ${v.addr}。以后只要说"给 ${v.name} 转 20 USDC"就行。`

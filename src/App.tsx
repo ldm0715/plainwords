@@ -50,6 +50,7 @@ import type {
   ChatMessage,
   ConfirmMessage,
   PendingContactAction,
+  PendingSend,
   SendIntent,
   SwapIntent,
 } from "@/lib/types"
@@ -80,6 +81,11 @@ function AppInner() {
   const ownerKey = publicKey?.toBase58() ?? "guest"
   const sessionTotalUsdRef = useRef(0)
   const lastUserTextRef = useRef("")
+  // Live progress of multi-send batches (one sentence, several transfers):
+  // lets each leg's summary state how many legs are done / still pending.
+  // Session-scoped on purpose — stale cards after a reload just summarize
+  // without the batch suffix.
+  const batchProgress = useRef(new Map<string, { total: number; done: number; skipped: number }>())
 
   // --- conversation sessions (persisted, per-account) ---
   const [sessions, setSessions] = useState<Session[]>(() => {
@@ -296,7 +302,10 @@ function AppInner() {
   // risk → confirm card. Used by BOTH the chat (LLM intents) and the Contacts
   // send dialog (direct intents, no LLM round-trip).
   const runTransferIntent = useCallback(
-    async (intent: SendIntent | SwapIntent) => {
+    async (
+      intent: SendIntent | SwapIntent,
+      batch?: { id: string; index: number; total: number },
+    ) => {
       if (!publicKey || !connected) {
         pushAssistant(t("connectFirst"))
         return
@@ -318,6 +327,7 @@ function AppInner() {
       // Tag the confirm card with the contact name when we know it.
       if (pending.kind === "send") {
         pending.destLabel = contacts.find((c) => c.address === pending.destAddress)?.name
+        if (batch) pending.batch = batch
       }
       mutateActive((m) => [
         ...m,
@@ -356,186 +366,211 @@ function AppInner() {
           return
         }
 
-        const { intent } = result
         if (result.warning) pushAssistant(result.warning)
 
-        if (intent.tool === "get_balance") {
-          const b = await getBalances(publicKey)
-          const solUsd = solPriceUsd !== null ? ` (≈ $${(b.sol * solPriceUsd).toFixed(2)})` : ""
-          const total =
-            solPriceUsd !== null ? ` Total ≈ $${(b.sol * solPriceUsd + b.usdc).toFixed(2)}.` : ""
-          pushAssistant(
-            t("balance", {
-              sol: b.sol.toFixed(4),
-              solUsd,
-              usdc: b.usdc.toFixed(2),
-              total,
-            }),
-          )
-          return
+        // One sentence can carry several transfers (system.md rule 5): run the
+        // chain once per parsed call. Batches are send-only — the guard skips
+        // any non-executable intent that slips into a multi-call turn.
+        const multi = result.items.length > 1
+        const sendItems = result.items.filter((i) => i.intent.tool === "send_payment")
+        const batching = sendItems.length > 1
+        let batchId: string | undefined
+        let sendNo = 0
+        if (batching) {
+          pushAssistant(t("pendingBatch", { count: String(sendItems.length) }))
+          batchId = uid()
+          batchProgress.current.set(batchId, { total: sendItems.length, done: 0, skipped: 0 })
         }
 
-        if (intent.tool === "get_price") {
-          // boot-time price if we have it, else a fresh quote; math stays
-          // deterministic here — the LLM never converts currencies itself
-          const price = solPriceUsd ?? (await getSOLPriceUSD())
-          if (price === null) {
-            pushAssistant(t("priceUnavailable"))
-            return
-          }
-          const asset = intent.asset ?? "SOL"
-          const amount = intent.amount ?? 1
-          const quote = asset === "SOL" ? "USDC" : "SOL"
-          const out = asset === "SOL" ? amount * price : amount / price
-          pushAssistant(
-            t("price", {
-              amount: fmtAmount(asset, amount),
-              asset,
-              out: fmtAmount(quote, out),
-              quote,
-            }),
-          )
-          return
-        }
+        for (const item of result.items) {
+          const { intent } = item
 
-        if (intent.tool === "query_transfers") {
-          const all = history ?? (publicKey ? loadCachedHistory(publicKey) : [])
-          // resolve a contact name to its address for precise filtering
-          const cpAddress = intent.counterparty
-            ? (contacts.find((c) => c.name === intent.counterparty!.toLowerCase())?.address ??
-              intent.counterparty)
-            : undefined
-          const rows = filterTransfers(all, {
-            asset: intent.asset,
-            direction: intent.direction,
-            counterpartyAddress: cpAddress,
-            days: intent.days,
-            limit: intent.limit,
-          })
-          const nameByAddr = new Map(contacts.map((c) => [c.address, c.name]))
-          const data = rows.map((r) => ({
-            direction: r.outgoing ? "out" : "in",
-            counterparty: nameByAddr.get(r.counterparty) ?? r.counterparty,
-            asset: r.asset,
-            amount: Number(r.uiAmount.toFixed(6)),
-            feeSOL: Number(r.feeSOL.toFixed(6)),
-            time: new Date(r.blockTime * 1000).toISOString().slice(0, 16).replace("T", " "),
-          }))
-          // deterministic totals — the LLM quotes these, it never adds numbers itself
-          const total = (asset: "SOL" | "USDC", out: boolean) =>
-            Number(
-              rows
-                .filter((r) => r.asset === asset && r.outgoing === out)
-                .reduce((s, r) => s + r.uiAmount, 0)
-                .toFixed(6),
-            )
-          const sentFeeSOL = Number(rows.reduce((s, r) => s + (r.outgoing ? r.feeSOL : 0), 0).toFixed(6))
-          const solP = solPriceUsd ?? null
-          const summary = {
-            matched: rows.length,
-            sent: {
-              SOL: total("SOL", true),
-              USDC: total("USDC", true),
-              totalFeesSOL: sentFeeSOL,
-              ...(solP !== null ? { usdEstimate: +(total("SOL", true) * solP + total("USDC", true)).toFixed(2) } : {}),
-            },
-            received: {
-              SOL: total("SOL", false),
-              USDC: total("USDC", false),
-              ...(solP !== null ? { usdEstimate: +(total("SOL", false) * solP + total("USDC", false)).toFixed(2) } : {}),
-            },
-          }
-          try {
-            const answer = await answerWithToolResult({
-              history: chatHistory,
-              toolCallId: result.toolCallId ?? "",
-              toolName: "query_transfers",
-              toolArgs: intent,
-              result: { count: rows.length, summary, transfers: data },
-            })
-            pushAssistant(answer || `Found ${rows.length} transfer(s).`)
-          } catch {
-            // deterministic fallback when the LLM round-trip fails
-            if (!rows.length) {
-              pushAssistant(t("historyEmpty"))
-            } else {
-              const lines = rows
-                .slice(0, 5)
-                .map(
-                  (r) =>
-                    `${r.outgoing ? "→" : "←"} ${r.uiAmount} ${r.asset} · ${
-                      nameByAddr.get(r.counterparty) ?? r.counterparty.slice(0, 8)
-                    } · ${new Date(r.blockTime * 1000).toLocaleDateString()}`,
-                )
-              pushAssistant(lines.join("\n"))
-            }
-          }
-          return
-        }
+          if (multi && intent.tool !== "send_payment" && intent.tool !== "swap_tokens") continue
 
-        if (intent.tool === "add_contact") {
-          const res = addContact(ownerKey, intent.name, intent.address)
-          if ("error" in res) {
-            pushAssistant(t(res.error, { name: intent.name }))
-          } else {
-            setContacts(loadContacts(ownerKey))
+          let batch: PendingSend["batch"] | undefined
+          if (batching && intent.tool === "send_payment") {
+            sendNo++
+            batch = { id: batchId!, index: sendNo, total: sendItems.length }
+          }
+
+          if (intent.tool === "get_balance") {
+            const b = await getBalances(publicKey)
+            const solUsd = solPriceUsd !== null ? ` (≈ $${(b.sol * solPriceUsd).toFixed(2)})` : ""
+            const total =
+              solPriceUsd !== null ? ` Total ≈ $${(b.sol * solPriceUsd + b.usdc).toFixed(2)}.` : ""
             pushAssistant(
-              t("contactSaved", {
-                name: res.name,
-                addr: `${res.address.slice(0, 4)}…${res.address.slice(-4)}`,
+              t("balance", {
+                sol: b.sol.toFixed(4),
+                solUsd,
+                usdc: b.usdc.toFixed(2),
+                total,
               }),
             )
+            continue
           }
-          return
-        }
 
-        if (intent.tool === "edit_contact") {
-          const existing = contacts.find((c) => c.name === intent.name.toLowerCase())
-          if (!existing) {
-            pushAssistant(t("contactNotFound", { name: intent.name }))
-            return
+          if (intent.tool === "get_price") {
+            // boot-time price if we have it, else a fresh quote; math stays
+            // deterministic here — the LLM never converts currencies itself
+            const price = solPriceUsd ?? (await getSOLPriceUSD())
+            if (price === null) {
+              pushAssistant(t("priceUnavailable"))
+              continue
+            }
+            const asset = intent.asset ?? "SOL"
+            const amount = intent.amount ?? 1
+            const quote = asset === "SOL" ? "USDC" : "SOL"
+            const out = asset === "SOL" ? amount * price : amount / price
+            pushAssistant(
+              t("price", {
+                amount: fmtAmount(asset, amount),
+                asset,
+                out: fmtAmount(quote, out),
+                quote,
+              }),
+            )
+            continue
           }
-          mutateActive((m) => [
-            ...m,
-            {
-              id: uid(),
-              role: "contact-confirm",
-              action: {
-                op: "edit",
-                originalName: existing.name,
-                newName: intent.new_name,
-                newAddress: intent.new_address,
-                currentAddress: existing.address,
+
+          if (intent.tool === "query_transfers") {
+            const all = history ?? (publicKey ? loadCachedHistory(publicKey) : [])
+            // resolve a contact name to its address for precise filtering
+            const cpAddress = intent.counterparty
+              ? (contacts.find((c) => c.name === intent.counterparty!.toLowerCase())?.address ??
+                intent.counterparty)
+              : undefined
+            const rows = filterTransfers(all, {
+              asset: intent.asset,
+              direction: intent.direction,
+              counterpartyAddress: cpAddress,
+              days: intent.days,
+              limit: intent.limit,
+            })
+            const nameByAddr = new Map(contacts.map((c) => [c.address, c.name]))
+            const data = rows.map((r) => ({
+              direction: r.outgoing ? "out" : "in",
+              counterparty: nameByAddr.get(r.counterparty) ?? r.counterparty,
+              asset: r.asset,
+              amount: Number(r.uiAmount.toFixed(6)),
+              feeSOL: Number(r.feeSOL.toFixed(6)),
+              time: new Date(r.blockTime * 1000).toISOString().slice(0, 16).replace("T", " "),
+            }))
+            // deterministic totals — the LLM quotes these, it never adds numbers itself
+            const total = (asset: "SOL" | "USDC", out: boolean) =>
+              Number(
+                rows
+                  .filter((r) => r.asset === asset && r.outgoing === out)
+                  .reduce((s, r) => s + r.uiAmount, 0)
+                  .toFixed(6),
+              )
+            const sentFeeSOL = Number(rows.reduce((s, r) => s + (r.outgoing ? r.feeSOL : 0), 0).toFixed(6))
+            const solP = solPriceUsd ?? null
+            const summary = {
+              matched: rows.length,
+              sent: {
+                SOL: total("SOL", true),
+                USDC: total("USDC", true),
+                totalFeesSOL: sentFeeSOL,
+                ...(solP !== null ? { usdEstimate: +(total("SOL", true) * solP + total("USDC", true)).toFixed(2) } : {}),
               },
-              status: "pending",
-            },
-          ])
-          return
-        }
-
-        if (intent.tool === "remove_contact") {
-          const existing = contacts.find((c) => c.name === intent.name.toLowerCase())
-          if (!existing) {
-            pushAssistant(t("contactNotFound", { name: intent.name }))
-            return
-          }
-          mutateActive((m) => [
-            ...m,
-            {
-              id: uid(),
-              role: "contact-confirm",
-              action: {
-                op: "remove",
-                originalName: existing.name,
-                currentAddress: existing.address,
+              received: {
+                SOL: total("SOL", false),
+                USDC: total("USDC", false),
+                ...(solP !== null ? { usdEstimate: +(total("SOL", false) * solP + total("USDC", false)).toFixed(2) } : {}),
               },
-              status: "pending",
-            },
-          ])
-          return
-        }
+            }
+            try {
+              const answer = await answerWithToolResult({
+                history: chatHistory,
+                toolCallId: item.toolCallId ?? "",
+                toolName: "query_transfers",
+                toolArgs: intent,
+                result: { count: rows.length, summary, transfers: data },
+              })
+              pushAssistant(answer || `Found ${rows.length} transfer(s).`)
+            } catch {
+              // deterministic fallback when the LLM round-trip fails
+              if (!rows.length) {
+                pushAssistant(t("historyEmpty"))
+              } else {
+                const lines = rows
+                  .slice(0, 5)
+                  .map(
+                    (r) =>
+                      `${r.outgoing ? "→" : "←"} ${r.uiAmount} ${r.asset} · ${
+                        nameByAddr.get(r.counterparty) ?? r.counterparty.slice(0, 8)
+                      } · ${new Date(r.blockTime * 1000).toLocaleDateString()}`,
+                  )
+                pushAssistant(lines.join("\n"))
+              }
+            }
+            continue
+          }
 
-        await runTransferIntent(intent)
+          if (intent.tool === "add_contact") {
+            const res = addContact(ownerKey, intent.name, intent.address)
+            if ("error" in res) {
+              pushAssistant(t(res.error, { name: intent.name }))
+            } else {
+              setContacts(loadContacts(ownerKey))
+              pushAssistant(
+                t("contactSaved", {
+                  name: res.name,
+                  addr: `${res.address.slice(0, 4)}…${res.address.slice(-4)}`,
+                }),
+              )
+            }
+            continue
+          }
+
+          if (intent.tool === "edit_contact") {
+            const existing = contacts.find((c) => c.name === intent.name.toLowerCase())
+            if (!existing) {
+              pushAssistant(t("contactNotFound", { name: intent.name }))
+              continue
+            }
+            mutateActive((m) => [
+              ...m,
+              {
+                id: uid(),
+                role: "contact-confirm",
+                action: {
+                  op: "edit",
+                  originalName: existing.name,
+                  newName: intent.new_name,
+                  newAddress: intent.new_address,
+                  currentAddress: existing.address,
+                },
+                status: "pending",
+              },
+            ])
+            continue
+          }
+
+          if (intent.tool === "remove_contact") {
+            const existing = contacts.find((c) => c.name === intent.name.toLowerCase())
+            if (!existing) {
+              pushAssistant(t("contactNotFound", { name: intent.name }))
+              continue
+            }
+            mutateActive((m) => [
+              ...m,
+              {
+                id: uid(),
+                role: "contact-confirm",
+                action: {
+                  op: "remove",
+                  originalName: existing.name,
+                  currentAddress: existing.address,
+                },
+                status: "pending",
+              },
+            ])
+            continue
+          }
+
+          await runTransferIntent(intent, batch)
+        }
       } catch (e) {
         pushAssistant(
           e instanceof Error ? e.message : t("somethingWentWrong"),
@@ -577,10 +612,52 @@ function AppInner() {
         const result = await executeSend(signTransaction, msg.action, publicKey)
 
         const template = templateSummary(msg.action, result)
-        const summary = await summarize({
-          userText: lastUserTextRef.current,
-          summaryTemplate: template,
-        })
+        const prog = msg.action.batch ? batchProgress.current.get(msg.action.batch.id) : undefined
+
+        if (!result.ok) {
+          // executeSend re-simulated right before signing and refused (balance
+          // moved since the card was resolved). Nothing was signed, no fee lost.
+          if (prog) prog.skipped++
+          updateConfirm(id, { status: "failed", result })
+          pushAssistant(
+            await summarize({
+              userText: lastUserTextRef.current,
+              summaryTemplate: template,
+            }),
+          )
+          refreshBalances()
+          return
+        }
+
+        if (prog) prog.done++
+
+        // Batch legs get deterministic, context-aware summaries — an LLM shown
+        // only this tx's result will "helpfully" claim the sibling legs never
+        // happened. Only solo sends go through the LLM summarizer.
+        let summary: string
+        if (prog) {
+          const remaining = prog.total - prog.done - prog.skipped
+          const suffix =
+            remaining > 0
+              ? t("batchPartial", {
+                  total: String(prog.total),
+                  done: String(prog.done),
+                  remaining: String(remaining),
+                })
+              : prog.skipped > 0
+                ? t("batchMixed", {
+                    total: String(prog.total),
+                    done: String(prog.done),
+                    skipped: String(prog.skipped),
+                  })
+                : t("batchDone", { total: String(prog.total) })
+          summary = `${template} ${suffix}`
+        } else {
+          summary = await summarize({
+            userText: lastUserTextRef.current,
+            summaryTemplate: template,
+          })
+        }
 
         // session risk accounting: USD value moved in this session
         const usd =
@@ -630,9 +707,16 @@ function AppInner() {
 
   const handleCancel = useCallback(
     (id: string) => {
+      const msg = messages.find((m): m is ConfirmMessage => m.id === id && m.role === "confirm")
+      // a cancelled leg still counts against its batch's remaining total
+      const prog =
+        msg?.action.kind === "send" && msg.action.batch
+          ? batchProgress.current.get(msg.action.batch.id)
+          : undefined
+      if (prog) prog.skipped++
       updateConfirm(id, { status: "cancelled" })
     },
-    [updateConfirm],
+    [messages, updateConfirm],
   )
 
   // --- in-chat contact confirmation cards (LLM requests) ---

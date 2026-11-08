@@ -129,6 +129,9 @@ const FLAGS: RiskFlag[] = [
   "pressure_tactic",
 ]
 
+// Prompt parity (system.md rule 5): at most 3 send_payment calls per turn.
+const MAX_TURN_INTENTS = 3
+
 const TOOLS: OpenAI.ChatCompletionTool[] = [
   {
     type: "function",
@@ -290,9 +293,15 @@ export interface HistoryTurn {
   content: string
 }
 
+/** One parsed tool call: the validated intent plus its id for read-only round-trips. */
+export interface IntentItem {
+  intent: Intent
+  toolCallId?: string
+}
+
 export type AIResult =
   | { kind: "text"; text: string }
-  | { kind: "intent"; intent: Intent; warning?: string; toolCallId?: string }
+  | { kind: "intents"; items: IntentItem[]; warning?: string }
 
 /** Narrow + validate raw tool arguments into a typed Intent; null when invalid. */
 function coerceIntent(name: string, raw: string): Intent | null {
@@ -406,9 +415,10 @@ function coerceIntent(name: string, raw: string): Intent | null {
 }
 
 /**
- * One turn of intent parsing: plain-language reply OR a validated tool intent.
- * Contacts are injected into the system prompt so names resolve to addresses.
- * Retries once on malformed output (docs/plainwords-plan.md §9).
+ * One turn of intent parsing: plain-language reply OR 1..N validated tool
+ * intents (multi-send turns — system.md rule 5). Contacts are injected into
+ * the system prompt so names resolve to addresses. Retries once on malformed
+ * output (docs/plainwords-plan.md §9).
  */
 export async function parseIntent(
   history: HistoryTurn[],
@@ -433,18 +443,39 @@ export async function parseIntent(
   let res = await ask()
   let msg = res.choices[0]?.message
 
-  if (msg?.tool_calls?.length) {
-    const call = msg.tool_calls[0]
-    // openai v5 unions custom tool calls into tool_calls; only function calls are ours
-    const intent =
-      call.type === "function" ? coerceIntent(call.function.name, call.function.arguments) : null
-    if (intent) {
-      const warning = msg.content?.trim() || undefined // rule 5: verbal warning alongside the call
-      return { kind: "intent", intent, warning, toolCallId: call.id }
+  // Coerce EVERY function tool call into a validated intent — one sentence may
+  // carry several transfers (system.md rule 5). A turn is all-or-nothing: one
+  // malformed call voids the whole turn (never silently drop a transfer leg)
+  // and triggers the guided retry below.
+  const parseCalls = (m: typeof msg): IntentItem[] | null => {
+    const calls = m?.tool_calls ?? []
+    if (!calls.length) return null
+    const items: IntentItem[] = []
+    for (const call of calls) {
+      // openai v5 unions custom tool calls into tool_calls; only function calls are ours
+      if (call.type !== "function") return []
+      const intent = coerceIntent(call.function.name, call.function.arguments)
+      if (!intent) return []
+      items.push({ intent, toolCallId: call.id })
     }
-    // Malformed tool output → one guided retry.
+    return items
+  }
+
+  let items = parseCalls(msg)
+
+  if (items !== null && items.length === 0) {
+    // Malformed tool output → one guided retry (docs/plainwords-plan.md §9).
     res = await ask()
     msg = res.choices[0]?.message
+    items = parseCalls(msg)
+  }
+
+  if (items !== null && items.length > 0) {
+    return {
+      kind: "intents",
+      items: items.slice(0, MAX_TURN_INTENTS),
+      warning: msg?.content?.trim() || undefined, // rule 7: verbal warning alongside the calls
+    }
   }
 
   const text = msg?.content?.trim()
@@ -504,7 +535,7 @@ export async function summarize(args: {
         {
           role: "system",
           content:
-            "You summarize finished Solana transactions for a non-technical user. One or two short, warm sentences. REPLY IN THE SAME LANGUAGE as the user's message below (Chinese message ⇒ Chinese summary). Use the numbers you are given exactly — never invent or round differently. No emoji spam, no financial advice.",
+            "You summarize finished Solana transactions for a non-technical user. One or two short, warm sentences. REPLY IN THE SAME LANGUAGE as the user's message below (Chinese message ⇒ Chinese summary). Use the numbers you are given exactly — never invent or round differently. The transaction result is complete and self-contained: describe ONLY what it states — never speculate about other transfers, pending items, or what the transaction history does or does not show. No emoji spam, no financial advice.",
         },
         {
           role: "user",

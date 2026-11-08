@@ -120,6 +120,12 @@ export interface PendingSend {
   feeSOL: number
   risk: RiskAssessment
   sim: SimResult | null
+  /**
+   * Set when several sends were requested in one sentence (system.md rule 5).
+   * Lets confirm-time summaries reference sibling legs deterministically
+   * instead of an LLM guessing what "the rest of the request" did.
+   */
+  batch?: { id: string; index: number; total: number }
 }
 
 /**

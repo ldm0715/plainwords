@@ -176,6 +176,13 @@ export async function executeSend(
     pending.asset === "SOL"
       ? await buildSOLTransfer(owner, dest, pending.uiAmount)
       : await buildUSDCTransfer(owner, dest, pending.uiAmount)
+  // Re-simulate against fresh state: the balance may have moved since the card
+  // was resolved (multi-card turns, or a delayed confirmation). Refusing here
+  // keeps the fee unspent — a failed on-chain tx still costs the network fee.
+  const sim = await simulateTx(tx)
+  if (!sim.ok) {
+    return { ok: false, error: sim.error }
+  }
   const signature = await signSendConfirm(signTransaction, tx)
   return { ok: true, signature, sentAmount: pending.uiAmount }
 }
