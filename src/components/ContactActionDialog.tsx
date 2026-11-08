@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog"
 import { t } from "@/lib/i18n"
 import { shortAddress } from "@/lib/solana"
+import type { ContactError } from "@/lib/contacts"
 import type { PendingContactAction } from "@/lib/types"
 
 function DiffLine({ label, before, after }: { label: string; before: string; after?: string }) {
@@ -38,11 +39,13 @@ function DiffLine({ label, before, after }: { label: string; before: string; aft
 
 interface Props {
   action: PendingContactAction | null
+  /** Why the last apply failed (invalid address, duplicate name, …) */
+  error: ContactError | null
   onConfirm: () => void
   onCancel: () => void
 }
 
-export function ContactActionDialog({ action, onConfirm, onCancel }: Props) {
+export function ContactActionDialog({ action, error, onConfirm, onCancel }: Props) {
   const open = action !== null
   const isEdit = action?.op === "edit"
 
@@ -106,6 +109,12 @@ export function ContactActionDialog({ action, onConfirm, onCancel }: Props) {
                 </>
               )}
             </div>
+
+            {error && (
+              <p className="text-destructive text-xs">
+                {t(error, { name: action.originalName })}
+              </p>
+            )}
 
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={onCancel}>

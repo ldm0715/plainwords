@@ -57,6 +57,16 @@ export function normalizeName(name: string): string {
   return name.trim().toLowerCase()
 }
 
+/** True when the string parses as a base58 Solana public key. */
+export function isValidAddress(address: string): boolean {
+  try {
+    new PublicKey(address.trim())
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function addContact(
   owner: string,
   name: string,

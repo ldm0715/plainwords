@@ -24,6 +24,7 @@ import {
   removeContact,
   updateContact,
   type Contact,
+  type ContactError,
 } from "@/lib/contacts"
 import { executeSend, fmtAmount, resolveSend, resolveSwap, templateSummary } from "@/lib/pipeline"
 import {
@@ -918,6 +919,7 @@ function AppInner() {
 
   // --- Contacts-panel edit/remove confirmation dialog ---
   const [contactAction, setContactAction] = useState<PendingContactAction | null>(null)
+  const [contactError, setContactError] = useState<ContactError | null>(null)
 
   // --- "send to contact" dialog state ---
   const [sendFor, setSendFor] = useState<Contact | null>(null)
@@ -926,14 +928,20 @@ function AppInner() {
     if (!contactAction) return
     const a = contactAction
     if (a.op === "edit") {
-      updateContact(ownerKey, a.originalName, {
+      const res = updateContact(ownerKey, a.originalName, {
         name: a.newName,
         address: a.newAddress,
         description: a.newDescription,
       })
+      // Invalid address / duplicate name: keep the dialog open and show why.
+      if ("error" in res) {
+        setContactError(res.error)
+        return
+      }
     } else {
       removeContact(ownerKey, a.originalName)
     }
+    setContactError(null)
     setContacts(loadContacts(ownerKey))
     setContactAction(null)
   }, [contactAction, ownerKey])
@@ -1014,7 +1022,8 @@ function AppInner() {
             <ContactsPanel
               contacts={contacts}
               onAdd={handleAddContact}
-              onRequestEdit={(originalName, newName, newAddress, currentAddress, newDescription) =>
+              onRequestEdit={(originalName, newName, newAddress, currentAddress, newDescription) => {
+                setContactError(null)
                 setContactAction({
                   op: "edit",
                   originalName,
@@ -1024,10 +1033,11 @@ function AppInner() {
                   currentAddress,
                   currentDescription: contacts.find((c) => c.name === originalName)?.description,
                 })
-              }
-              onRequestRemove={(name, address) =>
+              }}
+              onRequestRemove={(name, address) => {
+                setContactError(null)
                 setContactAction({ op: "remove", originalName: name, currentAddress: address })
-              }
+              }}
               onRequestSend={(c) => setSendFor(c)}
             />
           ) : (
@@ -1054,8 +1064,12 @@ function AppInner() {
 
       <ContactActionDialog
         action={contactAction}
+        error={contactError}
         onConfirm={handleContactActionConfirm}
-        onCancel={() => setContactAction(null)}
+        onCancel={() => {
+          setContactAction(null)
+          setContactError(null)
+        }}
       />
 
       <SettingsDialog

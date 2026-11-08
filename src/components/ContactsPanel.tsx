@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { shortAddress } from "@/lib/solana"
 import { t, ui } from "@/lib/i18n"
-import type { Contact, ContactError } from "@/lib/contacts"
+import { isValidAddress, type Contact, type ContactError } from "@/lib/contacts"
 
 interface Props {
   contacts: Contact[]
@@ -52,7 +52,7 @@ export function ContactsPanel({
   onRequestRemove,
   onRequestSend,
 }: Props) {
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ContactError | null>(null)
   const [edit, setEdit] = useState<EditDraft | null>(null)
   const [addOpen, setAddOpen] = useState(false)
   const [add, setAdd] = useState<AddDraft>({ name: "", address: "", description: "" })
@@ -70,6 +70,15 @@ export function ContactsPanel({
 
   const submitEdit = () => {
     if (!edit) return
+    if (!edit.name.trim()) {
+      setError("contactNameRequired")
+      return
+    }
+    if (!isValidAddress(edit.address)) {
+      setError("contactBadAddress")
+      return
+    }
+    setError(null)
     const current = contacts.find((c) => c.name === edit.original)
     onRequestEdit(edit.original, edit.name, edit.address, current?.address ?? "", edit.description)
     // the confirm dialog takes over from here — drop the inline edit form so
@@ -128,8 +137,18 @@ export function ContactsPanel({
                     aria-label={ui("Contact note", "联系人备注")}
                     className="text-xs"
                   />
+                  {error && (
+                    <p className="text-destructive text-xs">{t(error, { name: edit.name })}</p>
+                  )}
                   <div className="flex justify-end gap-2">
-                    <Button variant="ghost" size="sm" onClick={() => setEdit(null)}>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setEdit(null)
+                        setError(null)
+                      }}
+                    >
                       Cancel
                     </Button>
                     <Button size="sm" onClick={submitEdit}>
@@ -170,14 +189,15 @@ export function ContactsPanel({
                       variant="ghost"
                       size="icon-sm"
                       aria-label={`Edit ${c.name}`}
-                      onClick={() =>
+                      onClick={() => {
+                        setError(null)
                         setEdit({
                           original: c.name,
                           name: c.name,
                           address: c.address,
                           description: c.description ?? "",
                         })
-                      }
+                      }}
                     >
                       <Pencil />
                     </Button>
@@ -228,7 +248,7 @@ export function ContactsPanel({
                 aria-label={ui("Contact note", "联系人备注")}
                 className="text-xs"
               />
-              {error && <p className="text-destructive text-xs">{t(error as never)}</p>}
+              {error && <p className="text-destructive text-xs">{t(error, { name: add.name })}</p>}
             </div>
             <DialogFooter className="gap-2">
               <Button variant="outline" onClick={() => setAddOpen(false)}>
