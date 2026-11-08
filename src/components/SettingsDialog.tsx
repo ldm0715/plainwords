@@ -50,13 +50,18 @@ export function SettingsDialog({ open, onClose, onChange }: Props) {
   const [modelsError, setModelsError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
 
-  useEffect(() => {
-    if (!open) return
+  /** Fill the form with the effective config (stored overrides > built-in defaults). */
+  const fillFromEffective = () => {
     const cfg = getLLMConfig()
     setBaseUrl(cfg.baseUrl)
     // Never prefill the sentinel: leaving the field empty means "use the server key".
     setApiKey(cfg.apiKey === SERVER_KEY_PLACEHOLDER ? "" : cfg.apiKey)
     setModel(cfg.model)
+  }
+
+  useEffect(() => {
+    if (!open) return
+    fillFromEffective()
     setModels([])
     setModelsError(null)
     setSaved(false)
@@ -147,11 +152,10 @@ export function SettingsDialog({ open, onClose, onChange }: Props) {
               type="button"
               className="text-muted-foreground hover:text-foreground text-[11px] underline underline-offset-2"
               onClick={() => {
-                setBaseUrl("")
-                setApiKey("")
-                setModel("")
                 applyLLMConfig({})
+                fillFromEffective()
                 setModels([])
+                setModelsError(null)
               }}
             >
               {ui("Reset to defaults", "恢复默认")}
