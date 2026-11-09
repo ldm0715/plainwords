@@ -7,7 +7,7 @@ Operate a Solana wallet in plain language — say what you want, confirm once, s
 | | |
 |---|---|
 | **Live demo** | https://plainwords-chi.vercel.app (Phantom on **Devnet**) |
-| **Demo video** | [▶ Watch the 2-minute walkthrough](https://drive.google.com/file/d/1SNOw3q6e4dBKiPbAs4GwHQ5XXUlC0wp4/view?usp=sharing) |
+| **Demo video** | [▶ Watch the 2-minute walkthrough](https://www.youtube.com/watch?v=TSlepT6883c) |
 | **Event** | [Solana Hackathon x MLH](https://events.mlh.com/events/15200-solana-hackathon) — AI Track / DeFi Track |
 | **Network** | Solana Devnet · SOL and USDC |
 
